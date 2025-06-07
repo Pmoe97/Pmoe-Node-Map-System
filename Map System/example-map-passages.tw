@@ -1,0 +1,238 @@
+:: KingsStreet3
+You stand in the heart of King's Street, the main thoroughfare of the district. The cobblestone street bustles with merchants, travelers, and locals going about their daily business. 
+
+To the north, you can see the street continuing toward the upper district. To the south, it leads toward the palace gates. East takes you toward the merchant quarter, while west leads to a quieter residential area.
+
+The Three Sips Dragon Tavern's sign creaks in the breeze to the northeast, and you can smell the aroma of roasted meat and ale drifting from its direction.
+
+<<if MapSystem.currentMap>>
+	<div class="map-debug">
+		<strong>Map Debug Info:</strong><br>
+		Current Map: <<print MapSystem.currentMap.name>><br>
+		Position: (<<print MapSystem.currentPosition.x>>, <<print MapSystem.currentPosition.y>>)<br>
+		<button onclick="MapSystem.setMovementBlocked(!MapSystem.movementBlocked)">
+			Toggle Movement (Currently: <<print MapSystem.movementBlocked ? "Blocked" : "Enabled">>)
+		</button>
+	</div>
+<</if>>
+
+[[Continue exploring->KingsStreet3]]
+
+:: ThreeSipsDragonTavern
+You push through the heavy wooden doors of the Three Sips Dragon Tavern. The interior is warm and inviting, filled with the chatter of patrons and the clinking of tankards. A large fireplace crackles in the corner, casting dancing shadows on the walls.
+
+The tavern keeper, a burly man with a graying beard, nods at you from behind the bar. Several locals sit at various tables, some engaged in animated conversations, others quietly nursing their drinks.
+
+A bard in the corner strums a lute, singing tales of distant lands and heroic adventures.
+
+<<button "Order a drink">>
+	<<replace "#tavern-action">>You order a mug of the tavern's famous ale. The tavern keeper slides it across the bar with a friendly smile. "That'll be 2 gold," he says.<</replace>>
+<</button>>
+
+<<button "Listen to the bard">>
+	<<replace "#tavern-action">>You settle in to listen to the bard's tales. His voice is melodious as he sings of ancient heroes and forgotten kingdoms.<</replace>>
+<</button>>
+
+<<button "Talk to locals">>
+	<<replace "#tavern-action">>You approach a table of locals. They welcome you warmly and share news of recent happenings in the district.<</replace>>
+<</button>>
+
+<div id="tavern-action"></div>
+
+[[Leave the tavern->KingsStreet1]]
+
+:: AlchemistFireShop
+You enter the Alchemist Fire, a shop filled with bubbling potions, glowing crystals, and the sharp scent of magical reagents. Shelves line the walls, packed with bottles of various shapes and sizes containing liquids of every color imaginable.
+
+Behind the counter stands an elderly woman with silver hair and keen eyes. She looks up from grinding some herbs and smiles at you.
+
+"Welcome to the Alchemist Fire," she says in a warm voice. "I'm Elara. Looking for anything in particular? I have healing potions, magical components, and various alchemical supplies."
+
+<<button "Browse healing potions">>
+	<<replace "#shop-display">>
+		<strong>Healing Potions:</strong><br>
+		• Minor Healing Potion - 15 gold<br>
+		• Healing Potion - 50 gold<br>
+		• Greater Healing Potion - 150 gold
+	<</replace>>
+<</button>>
+
+<<button "Look at magical components">>
+	<<replace "#shop-display">>
+		<strong>Magical Components:</strong><br>
+		• Dragon Scale - 200 gold<br>
+		• Phoenix Feather - 500 gold<br>
+		• Moonstone Dust - 75 gold
+	<</replace>>
+<</button>>
+
+<<button "Ask about custom orders">>
+	<<replace "#shop-display">>
+		"Ah, a discerning customer!" Elara's eyes light up. "I can craft custom potions if you bring me the right ingredients. What did you have in mind?"
+	<</replace>>
+<</button>>
+
+<div id="shop-display"></div>
+
+[[Leave the shop->KingsStreet3]]
+
+:: NuzzlingNoctailBrothel
+You approach the entrance of the Nuzzling Noctail, an upscale establishment known throughout the district. The building is well-maintained with elegant decorations and soft lighting that creates an inviting atmosphere.
+
+A well-dressed doorman greets you with a professional smile. "Welcome to the Nuzzling Noctail. Are you here for companionship, entertainment, or perhaps just a drink in our lounge?"
+
+The establishment appears to cater to a refined clientele, with tasteful artwork adorning the walls and the sound of gentle music drifting from within.
+
+<<button "Enter the lounge">>
+	<<replace "#brothel-action">>You enter the main lounge, where patrons relax in comfortable chairs while enjoying drinks and conversation. The atmosphere is sophisticated and welcoming.<</replace>>
+<</button>>
+
+<<button "Inquire about services">>
+	<<replace "#brothel-action">>The doorman explains the various services available, from simple companionship to more intimate arrangements. All interactions are consensual and professional.<</replace>>
+<</button>>
+
+<<button "Ask about the establishment">>
+	<<replace "#brothel-action">>The doorman tells you about the history of the Nuzzling Noctail, how it's been a respected part of the district for many years, providing a safe and comfortable environment.<</replace>>
+<</button>>
+
+<div id="brothel-action"></div>
+
+[[Leave->KingsStreet3]]
+
+:: PalaceGate
+You stand before the imposing gates of the royal palace. Tall iron bars topped with golden spikes stretch high above you, and beyond them you can see manicured gardens and the palace's magnificent architecture.
+
+Two guards in polished armor stand at attention on either side of the gate. Their eyes follow your movements, but they remain silent and professional.
+
+A brass plaque near the gate reads: "Royal Palace of Bastion - Authorized Personnel Only"
+
+<<if State.variables.player && State.variables.player.reputation && State.variables.player.reputation.royal >= 10>>
+	The guards recognize your standing with the royal court and nod respectfully.
+	
+	[[Enter the palace->PalaceEntrance]]
+<<else>>
+	The guards eye you carefully. It's clear that you would need significant reputation with the royal court to gain entry here.
+<</if>>
+
+[[Return to King's Street->KingsStreet4]]
+
+:: CityGate
+You reach the eastern gate of the city, a massive stone archway that serves as one of the main entrances to the district. Guards check the papers of travelers coming and going, while merchants with loaded carts wait in line to have their goods inspected.
+
+Beyond the gate, you can see the road stretching into the distance, leading to other parts of the kingdom. The countryside looks peaceful, with rolling hills and scattered farmsteads visible in the distance.
+
+A notice board near the gate displays various announcements: job postings, wanted posters, and news from other settlements.
+
+<<button "Read the notice board">>
+	<<replace "#gate-info">>
+		<strong>Current Notices:</strong><br>
+		• Seeking adventurers for escort mission to Millbrook<br>
+		• Reward offered for information about missing merchant caravan<br>
+		• Royal decree: New trade regulations in effect<br>
+		• Warning: Increased bandit activity on the northern roads
+	<</replace>>
+<</button>>
+
+<<button "Talk to the guards">>
+	<<replace "#gate-info">>
+		The guards are friendly but professional. They tell you about recent travelers and any news from the roads. "Been quiet lately," one says, "but keep your wits about you if you're heading out."
+	<</replace>>
+<</button>>
+
+<<button "Observe the travelers">>
+	<<replace "#gate-info">>
+		You watch the steady stream of people passing through the gate. Merchants, farmers, adventurers, and ordinary folk all make their way in and out of the city.
+	<</replace>>
+<</button>>
+
+<div id="gate-info"></div>
+
+[[Return to the city->SilkStreet3]]
+
+:: MapSystemTest
+<h2>Map System Test Page</h2>
+
+This is a test page for the Map System. Use the buttons below to test various features.
+
+<h3>Basic Map Controls</h3>
+<<button "Load Example Map">>
+	<<run MapSystem.setCurrentMap('example-map')>>
+	<<replace "#map-status">>Map loaded successfully! You can now use WASD or arrow keys to move around.<</replace>>
+<</button>>
+
+<<button "Open Full Map">>
+	<<run MapSystem.openFullMap()>>
+<</button>>
+
+<<button "Toggle Movement Block">>
+	<<run MapSystem.setMovementBlocked(!MapSystem.movementBlocked)>>
+	<<replace "#movement-status">>Movement is now: <<print MapSystem.movementBlocked ? "BLOCKED" : "ENABLED">><</replace>>
+<</button>>
+
+<h3>Position Controls</h3>
+<<button "Go to King's Street (5,3)">>
+	<<run MapSystem.currentPosition = {x: 5, y: 3}>>
+	<<run MapSystem.updateMinimapDisplay()>>
+	<<run MapSystem.updateLocationInfo()>>
+	<<replace "#position-status">>Moved to King's Street<</replace>>
+<</button>>
+
+<<button "Go to Tavern (6,1)">>
+	<<run MapSystem.currentPosition = {x: 6, y: 1}>>
+	<<run MapSystem.updateMinimapDisplay()>>
+	<<run MapSystem.updateLocationInfo()>>
+	<<replace "#position-status">>Moved to Three Sips Dragon Tavern<</replace>>
+<</button>>
+
+<<button "Go to Palace Gate (5,5)">>
+	<<run MapSystem.currentPosition = {x: 5, y: 5}>>
+	<<run MapSystem.updateMinimapDisplay()>>
+	<<run MapSystem.updateLocationInfo()>>
+	<<replace "#position-status">>Moved to Palace Gate<</replace>>
+<</button>>
+
+<h3>Status</h3>
+<div id="map-status">No map loaded</div>
+<div id="movement-status">Movement status: Unknown</div>
+<div id="position-status">Position: Unknown</div>
+
+<h3>Instructions</h3>
+<p><strong>Keyboard Controls:</strong></p>
+<ul>
+<li>W or ↑ - Move North</li>
+<li>S or ↓ - Move South</li>
+<li>A or ← - Move West</li>
+<li>D or → - Move East</li>
+</ul>
+
+<p><strong>Mouse Controls:</strong></p>
+<ul>
+<li>Click the maximize button in the minimap to open the full map</li>
+<li>In the full map, click on adjacent tiles to move</li>
+</ul>
+
+<p><strong>Features to Test:</strong></p>
+<ul>
+<li>Load the example map and try moving around</li>
+<li>Open the Journal and check the Map tab</li>
+<li>Try moving to different locations and see how the minimap updates</li>
+<li>Test movement blocking (useful for conversations/overlays)</li>
+</ul>
+
+[[Return to main story->KingsStreet3]]
+
+<<script>>
+// Initialize map system test
+$(document).ready(function() {
+	// Update status displays
+	setTimeout(function() {
+		if (MapSystem.currentMap) {
+			$('#map-status').text('Map loaded: ' + MapSystem.currentMap.name);
+		}
+		$('#movement-status').text('Movement is: ' + (MapSystem.movementBlocked ? 'BLOCKED' : 'ENABLED'));
+		if (MapSystem.currentPosition) {
+			$('#position-status').text('Position: (' + MapSystem.currentPosition.x + ', ' + MapSystem.currentPosition.y + ')');
+		}
+	}, 100);
+});
+<</script>>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twine Map Editor</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+    <!-- Initial Setup Modal -->
+    <div id="setupModal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Map</h2>
+            <form id="setupForm">
+                <div class="form-group">
+                    <label for="mapName">Map Name:</label>
+                    <input type="text" id="mapName" required>
+                </div>
+                <div class="form-group">
+                    <label for="mapWidth">Map Width (columns):</label>
+                    <input type="number" id="mapWidth" min="3" max="20" value="5" required>
+                </div>
+                <div class="form-group">
+                    <label for="mapHeight">Map Height (rows):</label>
+                    <input type="number" id="mapHeight" min="3" max="20" value="5" required>
+                </div>
+                <button type="submit">Create Map</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Interface -->
+    <div id="mainInterface" class="hidden">
+        <header>
+            <h1 id="mapTitle">Twine Map Editor</h1>
+            <div class="toolbar">
+                <button id="newMapBtn">New Map</button>
+                <button id="importBtn">Import Map</button>
+                <button id="exportBtn">Export JSON</button>
+                <button id="exportTwBtn">Export .tw</button>
+                <button id="themeToggle">🌙</button>
+            </div>
+        </header>
+
+        <div class="editor-container">
+            <!-- Grid Container -->
+            <div class="grid-container">
+                <div id="mapGrid" class="map-grid"></div>
+            </div>
+
+            <!-- Sidebar -->
+            <div id="sidebar" class="sidebar hidden">
+                <div class="sidebar-header">
+                    <h3 id="sidebarTitle">Edit Node</h3>
+                    <button id="closeSidebar">&times;</button>
+                </div>
+                <div class="sidebar-content">
+                    <!-- Node Editor -->
+                    <div id="nodeEditor" class="editor-section">
+                        <div class="form-group">
+                            <label for="nodeName">Node Name:</label>
+                            <input type="text" id="nodeName">
+                        </div>
+                        <div class="form-group">
+                            <label for="passageName">Passage Name:</label>
+                            <input type="text" id="passageName">
+                        </div>
+                        <div class="form-group">
+                            <label for="nodeIcon">Icon:</label>
+                            <select id="nodeIcon">
+                                <option value="">Select Icon</option>
+                                <option value="home">Home</option>
+                                <option value="store">Store</option>
+                                <option value="sword">Sword</option>
+                                <option value="shield">Shield</option>
+                                <option value="key">Key</option>
+                                <option value="door-open">Door</option>
+                                <option value="castle">Castle</option>
+                                <option value="tree-pine">Forest</option>
+                                <option value="mountain">Mountain</option>
+                                <option value="waves">Water</option>
+                                <option value="flame">Fire</option>
+                                <option value="zap">Lightning</option>
+                                <option value="skull">Danger</option>
+                                <option value="gem">Treasure</option>
+                                <option value="scroll">Scroll</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="fogOfWar">
+                                Fog of War
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Node Conditions:</label>
+                            <div id="nodeConditionsList"></div>
+                            <button type="button" id="addNodeCondition">Add Node Condition</button>
+                        </div>
+                        <div class="form-actions">
+                            <button id="saveNode">Save Node</button>
+                            <button id="clearNode">Clear Node</button>
+                        </div>
+                    </div>
+
+                    <!-- Transition Editor -->
+                    <div id="transitionEditor" class="editor-section hidden">
+                        <div class="form-group">
+                            <label for="transitionType">Transition Type:</label>
+                            <select id="transitionType">
+                                <option value="bi">Bidirectional</option>
+                                <option value="oneway">One-way</option>
+                            </select>
+                        </div>
+                        <div id="directionGroup" class="form-group hidden">
+                            <label for="transitionDirection">Direction:</label>
+                            <select id="transitionDirection">
+                                <option value="north">North</option>
+                                <option value="south">South</option>
+                                <option value="east">East</option>
+                                <option value="west">West</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Conditions:</label>
+                            <div id="conditionsList"></div>
+                            <button id="addCondition">Add Condition</button>
+                        </div>
+                        <div class="form-actions">
+                            <button id="saveTransition">Save Transition</button>
+                            <button id="removeTransition">Remove Transition</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Condition Modal -->
+    <div id="conditionModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Add Condition</h3>
+            <form id="conditionForm">
+                <div class="form-group">
+                    <label for="conditionType">Condition Type:</label>
+                    <select id="conditionType" required>
+                        <option value="item">Item</option>
+                        <option value="quest">Quest</option>
+                        <option value="variable">Variable</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="conditionValue">Value:</label>
+                    <input type="text" id="conditionValue" required>
+                </div>
+                <div id="variableValueGroup" class="form-group hidden">
+                    <label for="variableValue">Variable Value:</label>
+                    <input type="text" id="variableValue">
+                </div>
+                <div class="form-actions">
+                    <button type="submit">Add</button>
+                    <button type="button" id="cancelCondition">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Hidden file input for importing maps -->
+    <input type="file" id="fileInput" accept=".json" style="display: none;">
+
+    <script src="main.js"></script>
+</body>
+</html>
