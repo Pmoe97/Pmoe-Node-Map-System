@@ -188,13 +188,90 @@ window.MapSystem = {
             return false;
         }
         
-        // Check transition type and direction
+        // Check transition type
+        if (transition.type === "none") {
+            return false;
+        }
+        
+        if (transition.type === "secret") {
+            // Secret transitions are hidden until unlocked
+            if (!this.isTransitionRevealed(currentNode, direction)) {
+                return false;
+            }
+        }
+        
         if (transition.type === "one-way" && transition.direction !== direction) {
+            return false;
+        }
+        
+        // Check if transition is currently locked by conditions
+        if (this.isTransitionLocked(transition)) {
             return false;
         }
         
         // Check conditions
         return this.checkTransitionConditions(transition.conditions);
+    },
+    
+    /**
+     * Check if a transition is currently locked by its conditions
+     */
+    isTransitionLocked(transition) {
+        if (!transition.conditions || transition.conditions.length === 0) {
+            return transition.type === "locked"; // Default locked state
+        }
+        
+        // Check for lockIf conditions
+        for (const condition of transition.conditions) {
+            if (condition.action === "lockIf" && this.evaluateCondition(condition)) {
+                return true;
+            }
+            if (condition.action === "unlockIf" && this.evaluateCondition(condition)) {
+                return false;
+            }
+        }
+        
+        // If no unlock conditions are met and it's a locked transition, remain locked
+        return transition.type === "locked";
+    },
+    
+    /**
+     * Check if a secret transition has been revealed
+     */
+    isTransitionRevealed(node, direction) {
+        const transition = node.transitions[direction];
+        if (transition.type !== "secret") {
+            return true;
+        }
+        
+        // Check for unlockIf conditions that would reveal the secret
+        if (transition.conditions) {
+            for (const condition of transition.conditions) {
+                if (condition.action === "unlockIf" && this.evaluateCondition(condition)) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    },
+    
+    /**
+     * Get the effective transition type after applying conditions
+     */
+    getEffectiveTransitionType(transition) {
+        if (!transition.conditions || transition.conditions.length === 0) {
+            return transition.type;
+        }
+        
+        // Check for changeIf conditions
+        for (const condition of transition.conditions) {
+            if (condition.action === "changeIf" && this.evaluateCondition(condition)) {
+                return condition.changeTarget || transition.type;
+            }
+        }
+        
+        return transition.type;
     },
     
     /**
@@ -221,23 +298,45 @@ window.MapSystem = {
         const player = State.variables.player;
         const inventory = State.variables.inventory_player || {};
         
-        switch (condition.type) {
+        // Handle both old and new condition formats
+        const conditionType = condition.type;
+        const operator = condition.operator || "==";
+        let targetValue, actualValue;
+        
+        switch (conditionType) {
             case "variable":
-                const value = this.getNestedValue(State.variables, condition.variable);
-                return this.compareValues(value, condition.operator, condition.value);
+                // New format: condition.name contains the variable path
+                // Old format: condition.variable contains the variable path
+                const variablePath = condition.name || condition.variable;
+                actualValue = this.getNestedValue(State.variables, variablePath);
+                targetValue = condition.value;
+                break;
                 
             case "item":
-                const itemCount = inventory[condition.item] || 0;
-                return this.compareValues(itemCount, condition.operator, condition.value);
+                // New format: condition.name contains the item name
+                // Old format: condition.item contains the item name
+                const itemName = condition.name || condition.item;
+                actualValue = inventory[itemName] || 0;
+                targetValue = condition.value || true; // Default to checking if item exists
+                break;
                 
             case "quest":
-                // Implement quest condition checking
-                return true; // Placeholder
+                // New format: condition.name contains the quest name
+                // Old format: condition.quest contains the quest name
+                const questName = condition.name || condition.quest;
+                // Implement quest condition checking based on your quest system
+                // For now, assume quests are stored in State.variables.quests
+                const quests = State.variables.quests || {};
+                actualValue = quests[questName] || false;
+                targetValue = condition.value || true; // Default to checking if quest is completed
+                break;
                 
             default:
-                console.warn(`[MapSystem] Unknown condition type: ${condition.type}`);
+                console.warn(`[MapSystem] Unknown condition type: ${conditionType}`);
                 return true;
         }
+        
+        return this.compareValues(actualValue, operator, targetValue);
     },
     
     /**
@@ -315,10 +414,13 @@ window.MapSystem = {
         this.updateMinimapDisplay();
         this.updateLocationInfo();
         
+        // Get the effective node data (applying conditions)
+        const effectiveNode = this.getEffectiveNodeData(targetNode);
+        
         // Navigate to the target passage
-        if (targetNode.passage) {
-            console.log(`[MapSystem] Moving to passage: ${targetNode.passage}`);
-            Engine.play(targetNode.passage);
+        if (effectiveNode.passage) {
+            console.log(`[MapSystem] Moving to passage: ${effectiveNode.passage}`);
+            Engine.play(effectiveNode.passage);
         }
         
         return true;
@@ -528,13 +630,43 @@ window.MapSystem = {
     },
     
     /**
+     * Get the effective node data after applying conditions
+     */
+    getEffectiveNodeData(node) {
+        if (!node || !node.conditions || node.conditions.length === 0) {
+            return node;
+        }
+        
+        // Create a copy of the node data
+        const effectiveNode = { ...node };
+        
+        // Check conditions in priority order (first condition that matches wins)
+        for (const condition of node.conditions) {
+            if (this.evaluateCondition(condition)) {
+                // Apply the condition's changes
+                if (condition.passage) {
+                    effectiveNode.passage = condition.passage;
+                }
+                if (condition.icon) {
+                    effectiveNode.icon = condition.icon;
+                }
+                // First matching condition takes precedence
+                break;
+            }
+        }
+        
+        return effectiveNode;
+    },
+    
+    /**
      * Update location info in sidebar
      */
     updateLocationInfo() {
         if (!this.currentMap) return;
         
         const currentNode = this.getNodeAt(this.currentPosition.x, this.currentPosition.y);
-        const locationName = currentNode ? currentNode.name : 'Unknown Location';
+        const effectiveNode = this.getEffectiveNodeData(currentNode);
+        const locationName = effectiveNode ? effectiveNode.name : 'Unknown Location';
         
         // Update world state
         if (State.variables.world) {

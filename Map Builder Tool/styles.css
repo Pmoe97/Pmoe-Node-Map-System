@@ -269,6 +269,78 @@ header h1 {
     background-color: var(--success-color);
 }
 
+/* Transition Type Specific Styles */
+.transition-connector.none {
+    background-color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+.transition-connector.bidirectional {
+    background-color: var(--success-color);
+}
+
+.transition-connector.one-way {
+    background-color: #17a2b8; /* Info blue */
+}
+
+.transition-connector.one-way::after {
+    content: '→';
+    position: absolute;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.transition-connector.one-way.vertical::after {
+    content: '↓';
+}
+
+.transition-connector.one-way.horizontal.left::after {
+    content: '←';
+}
+
+.transition-connector.one-way.vertical.top::after {
+    content: '↑';
+}
+
+.transition-connector.locked {
+    background-color: var(--warning-color);
+    position: relative;
+}
+
+.transition-connector.locked::after {
+    content: '🔒';
+    position: absolute;
+    font-size: 10px;
+    color: #212529;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+.transition-connector.secret {
+    background-color: #6f42c1; /* Purple */
+    opacity: 0.7;
+    animation: pulse 2s infinite;
+}
+
+.transition-connector.secret::after {
+    content: '👁';
+    position: absolute;
+    font-size: 10px;
+    opacity: 0.8;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 0.4; }
+    100% { opacity: 0.7; }
+}
+
+/* Legacy support for old 'oneway' class */
+.transition-connector.oneway {
+    background-color: #17a2b8;
+}
+
 .transition-connector.oneway::after {
     content: '→';
     position: absolute;
@@ -475,10 +547,179 @@ header h1 {
     color: var(--accent-color);
 }
 
-/* Node conditions styling */
+/* Node State Conditions styling */
+.node-state-condition-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 0.75rem;
+    background-color: var(--bg-tertiary);
+    border-left: 4px solid var(--accent-color);
+    border-radius: 4px;
+    margin-bottom: 0.75rem;
+    cursor: move;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.node-state-condition-item:hover {
+    background-color: var(--bg-secondary);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.node-state-condition-item.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
+}
+
+.drag-handle {
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    margin-right: 0.5rem;
+    cursor: grab;
+    user-select: none;
+    line-height: 1;
+    padding: 0.25rem;
+}
+
+.drag-handle:hover {
+    color: var(--accent-color);
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.condition-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.condition-content .condition-text {
+    font-size: 0.9rem;
+    line-height: 1.4;
+    color: var(--text-primary);
+}
+
+.condition-content .condition-text strong {
+    color: var(--accent-color);
+    font-weight: 600;
+}
+
+.condition-content .condition-text em {
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 0.85rem;
+}
+
+.node-state-condition-item .remove-condition {
+    background: none;
+    border: none;
+    color: var(--danger-color);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 2px;
+    font-size: 1.2rem;
+    line-height: 1;
+    margin-left: 0.5rem;
+    opacity: 0.7;
+    transition: all 0.2s;
+}
+
+.node-state-condition-item .remove-condition:hover {
+    background-color: var(--danger-color);
+    color: white;
+    opacity: 1;
+}
+
+/* Priority indicator */
+.node-state-condition-item::before {
+    content: counter(condition-counter);
+    counter-increment: condition-counter;
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    background-color: var(--accent-color);
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+#nodeConditionsList {
+    counter-reset: condition-counter;
+}
+
+/* Legacy node conditions styling for backward compatibility */
 #nodeConditionsList .condition-item {
     background-color: var(--bg-tertiary);
     border-left: 3px solid var(--warning-color);
+}
+
+/* Enhanced form styling for node condition modal */
+#nodeConditionModal .modal-content {
+    max-width: 600px;
+}
+
+#nodeConditionModal .form-group {
+    margin-bottom: 1.25rem;
+}
+
+#nodeConditionModal .form-group label {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+#nodeConditionModal input[type="text"],
+#nodeConditionModal select {
+    border: 2px solid var(--border-color);
+    transition: border-color 0.2s;
+}
+
+#nodeConditionModal input[type="text"]:focus,
+#nodeConditionModal select:focus {
+    border-color: var(--accent-color);
+}
+
+/* Drag and drop visual feedback */
+.node-state-condition-item.drag-over {
+    border-top: 3px solid var(--accent-color);
+    margin-top: 3px;
+}
+
+/* Empty state for node conditions */
+#nodeConditionsList:empty::after {
+    content: "No conditions set. Click 'Add Node Condition' to create dynamic node states.";
+    display: block;
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-style: italic;
+    background-color: var(--bg-secondary);
+    border-radius: 4px;
+    border: 2px dashed var(--border-color);
+}
+
+/* Condition type indicators */
+.node-state-condition-item[data-condition*='"type":"item"'] {
+    border-left-color: #28a745;
+}
+
+.node-state-condition-item[data-condition*='"type":"quest"'] {
+    border-left-color: #ffc107;
+}
+
+.node-state-condition-item[data-condition*='"type":"variable"'] {
+    border-left-color: #17a2b8;
+}
+
+.node-state-condition-item[data-condition*='"type":"time"'] {
+    border-left-color: #6f42c1;
 }
 
 /* Import/Export button styling */
@@ -602,4 +843,141 @@ header h1 {
         width: 16px;
         height: 16px;
     }
+}
+
+
+/* Node Icon Selection with Lucide Integration */
+.selected-icon-preview {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 0.5rem;
+    background-color: var(--bg-secondary);
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+
+#selectedIconName {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+#selectedIconSVG {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#selectedIconSVG svg,
+#selectedIconSVG i {
+    width: 32px;
+    height: 32px;
+    color: var(--accent-color);
+}
+
+#iconSearch {
+    margin-bottom: 0.5rem;
+}
+
+.icon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    padding: 8px;
+    border-radius: 4px;
+    background-color: var(--bg-secondary);
+}
+
+.icon-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background-color: var(--bg-primary);
+}
+
+.icon-tile:hover {
+    background-color: var(--node-hover);
+    border-color: var(--accent-color);
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.icon-tile.selected {
+    background-color: var(--node-filled);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.icon-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+}
+
+.icon-preview svg,
+.icon-preview i {
+    width: 28px;
+    height: 28px;
+    color: var(--text-primary);
+}
+
+.icon-tile.selected .icon-preview svg,
+.icon-tile.selected .icon-preview i {
+    color: var(--accent-color);
+}
+
+.icon-name {
+    font-size: 10px;
+    text-align: center;
+    color: var(--text-secondary);
+    line-height: 1.2;
+    word-break: break-word;
+    max-width: 100%;
+}
+
+.icon-tile.selected .icon-name {
+    color: var(--accent-color);
+    font-weight: 500;
+}
+
+/* Dark theme adjustments for icon selection */
+[data-theme="dark"] .icon-grid {
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .icon-tile:hover {
+    background-color: var(--node-hover);
+}
+
+[data-theme="dark"] .icon-tile.selected {
+    background-color: var(--node-filled);
+}
+
+/* Scrollbar styling for icon grid */
+.icon-grid::-webkit-scrollbar {
+    width: 8px;
+}
+
+.icon-grid::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.icon-grid::-webkit-scrollbar-thumb {
+    background: var(--text-secondary);
+    border-radius: 4px;
+}
+
+.icon-grid::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-color);
 }

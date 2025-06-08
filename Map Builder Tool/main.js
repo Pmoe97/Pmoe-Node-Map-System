@@ -61,12 +61,16 @@ function setupEventListeners() {
     // Transition type change
     document.getElementById('transitionType').addEventListener('change', handleTransitionTypeChange);
     
-    // Condition management
+    // Transition condition management
     document.getElementById('addCondition').addEventListener('click', () => showConditionModal('transition'));
-    document.getElementById('addNodeCondition').addEventListener('click', () => showConditionModal('node'));
     document.getElementById('conditionForm').addEventListener('submit', handleConditionSubmit);
     document.getElementById('cancelCondition').addEventListener('click', hideConditionModal);
-    document.getElementById('conditionType').addEventListener('change', handleConditionTypeChange);
+    document.getElementById('conditionAction').addEventListener('change', handleConditionActionChange);
+    
+    // Node condition management
+    document.getElementById('addNodeCondition').addEventListener('click', () => showNodeConditionModal());
+    document.getElementById('nodeConditionForm').addEventListener('submit', handleNodeConditionSubmit);
+    document.getElementById('cancelNodeCondition').addEventListener('click', hideNodeConditionModal);
     
     // Node memory - save form data on input
     setupNodeMemoryListeners();
@@ -246,7 +250,8 @@ function updateTransitionConnectors(col, row) {
     const connectors = cell.querySelectorAll('.transition-connector');
     
     connectors.forEach(connector => {
-        connector.classList.remove('active', 'oneway');
+        // Remove all transition type classes
+        connector.classList.remove('active', 'none', 'bidirectional', 'one-way', 'locked', 'secret');
         
         let targetCol, targetRow, direction;
         
@@ -265,10 +270,21 @@ function updateTransitionConnectors(col, row) {
         
         const transition = mapData.transitions.get(transitionKey) || mapData.transitions.get(reverseKey);
         
-        if (transition) {
+        if (transition && transition.type !== 'none') {
             connector.classList.add('active');
-            if (transition.type === 'oneway') {
-                connector.classList.add('oneway');
+            connector.classList.add(transition.type);
+            
+            // Special handling for secret transitions - they should be completely hidden
+            if (transition.type === 'secret') {
+                connector.style.display = 'none';
+            } else {
+                connector.style.display = '';
+            }
+        } else {
+            // Show connector but mark as inactive for 'none' type
+            connector.style.display = '';
+            if (transition && transition.type === 'none') {
+                connector.classList.add('none');
             }
         }
     });
@@ -302,7 +318,7 @@ function editTransition(fromCol, fromRow, toCol, toRow, direction) {
     const reverseKey = `${toCol},${toRow}-${fromCol},${fromRow}`;
     
     const transition = mapData.transitions.get(transitionKey) || mapData.transitions.get(reverseKey) || {
-        type: 'bi',
+        type: 'none',
         conditions: []
     };
     
@@ -324,7 +340,7 @@ function handleTransitionTypeChange() {
     const type = document.getElementById('transitionType').value;
     const directionGroup = document.getElementById('directionGroup');
     
-    if (type === 'oneway') {
+    if (type === 'one-way') {
         directionGroup.classList.remove('hidden');
     } else {
         directionGroup.classList.add('hidden');
@@ -456,40 +472,47 @@ function hideConditionModal() {
     document.getElementById('conditionModal').classList.add('hidden');
 }
 
-function handleConditionTypeChange() {
-    const type = document.getElementById('conditionType').value;
-    const variableGroup = document.getElementById('variableValueGroup');
+function handleConditionActionChange() {
+    const action = document.getElementById('conditionAction').value;
+    const changeTargetGroup = document.getElementById('changeTargetGroup');
     
-    if (type === 'variable') {
-        variableGroup.classList.remove('hidden');
-        document.getElementById('conditionValue').placeholder = 'Variable name';
+    if (action === 'changeIf') {
+        changeTargetGroup.classList.remove('hidden');
     } else {
-        variableGroup.classList.add('hidden');
-        document.getElementById('conditionValue').placeholder = type === 'item' ? 'Item name' : 'Quest name';
+        changeTargetGroup.classList.add('hidden');
     }
 }
 
 function handleConditionSubmit(e) {
     e.preventDefault();
     
+    const action = document.getElementById('conditionAction').value;
     const type = document.getElementById('conditionType').value;
+    const name = document.getElementById('conditionName').value.trim();
+    const operator = document.getElementById('conditionOperator').value;
     const value = document.getElementById('conditionValue').value.trim();
-    const variableValue = document.getElementById('variableValue').value.trim();
+    const changeTarget = document.getElementById('changeTarget').value;
     
-    if (!value) return;
+    if (!name || !value) return;
     
-    const condition = { type };
+    const condition = {
+        action: action,
+        type: type,
+        name: name,
+        operator: operator,
+        value: value
+    };
     
-    if (type === 'item') {
-        condition.item = value;
-    } else if (type === 'quest') {
-        condition.quest = value;
-    } else if (type === 'variable') {
-        condition.variable = value;
-        condition.value = variableValue;
+    if (action === 'changeIf') {
+        condition.changeTarget = changeTarget;
     }
     
-    addConditionToList(condition);
+    if (conditionModalContext === 'node') {
+        addNodeConditionToList(condition);
+    } else {
+        addConditionToList(condition);
+    }
+    
     hideConditionModal();
 }
 
@@ -498,17 +521,17 @@ function addConditionToList(condition) {
     
     const conditionItem = document.createElement('div');
     conditionItem.className = 'condition-item';
+    conditionItem.dataset.condition = JSON.stringify(condition);
     
     const conditionText = document.createElement('span');
     conditionText.className = 'condition-text';
     
-    if (condition.type === 'item') {
-        conditionText.textContent = `Item: ${condition.item}`;
-    } else if (condition.type === 'quest') {
-        conditionText.textContent = `Quest: ${condition.quest}`;
-    } else if (condition.type === 'variable') {
-        conditionText.textContent = `Variable: ${condition.variable} = ${condition.value}`;
+    // Format the condition display text
+    let displayText = `${condition.action}: ${condition.type} "${condition.name}" ${condition.operator} ${condition.value}`;
+    if (condition.changeTarget) {
+        displayText += ` → ${condition.changeTarget}`;
     }
+    conditionText.textContent = displayText;
     
     const removeBtn = document.createElement('button');
     removeBtn.className = 'remove-condition';
@@ -532,30 +555,15 @@ function updateConditionsList(conditions) {
 }
 
 function getCurrentConditions() {
-    const conditionItems = document.querySelectorAll('.condition-item');
+    const conditionItems = document.querySelectorAll('#conditionsList .condition-item');
     const conditions = [];
     
     conditionItems.forEach(item => {
-        const text = item.querySelector('.condition-text').textContent;
-        
-        if (text.startsWith('Item: ')) {
-            conditions.push({
-                type: 'item',
-                item: text.substring(6)
-            });
-        } else if (text.startsWith('Quest: ')) {
-            conditions.push({
-                type: 'quest',
-                quest: text.substring(7)
-            });
-        } else if (text.startsWith('Variable: ')) {
-            const variableText = text.substring(10);
-            const [variable, value] = variableText.split(' = ');
-            conditions.push({
-                type: 'variable',
-                variable: variable,
-                value: value
-            });
+        try {
+            const conditionData = JSON.parse(item.dataset.condition);
+            conditions.push(conditionData);
+        } catch (error) {
+            console.error('Error parsing condition data:', error);
         }
     });
     
@@ -818,6 +826,13 @@ function editNodeWithMemory(col, row) {
         document.getElementById('nodeIcon').value = nodeData.icon || '';
         document.getElementById('fogOfWar').checked = nodeData.fogOfWar || false;
         updateNodeConditionsList(nodeData.conditions || []);
+        
+        // Update icon selection UI
+        if (nodeData.icon) {
+            updateIconSelection(nodeData.icon);
+        } else {
+            clearIconSelection();
+        }
     }
     
     // Show node editor
@@ -1102,7 +1117,513 @@ function loadFromLocalStorage() {
     }
 }
 
+// Node Condition Modal Functions
+function showNodeConditionModal() {
+    document.getElementById('nodeConditionModal').classList.remove('hidden');
+    document.getElementById('nodeConditionForm').reset();
+    
+    // Clear condition icon selection
+    clearConditionIconSelection();
+    
+    // Initialize condition icon grid
+    renderConditionIconGrid();
+}
+
+function hideNodeConditionModal() {
+    document.getElementById('nodeConditionModal').classList.add('hidden');
+}
+
+function handleNodeConditionSubmit(e) {
+    e.preventDefault();
+    
+    const type = document.getElementById('nodeConditionType').value;
+    const name = document.getElementById('nodeConditionName').value.trim();
+    const operator = document.getElementById('nodeConditionOperator').value;
+    const value = document.getElementById('nodeConditionValue').value.trim();
+    const passage = document.getElementById('nodeConditionPassage').value.trim();
+    const icon = document.getElementById('nodeConditionIcon').value;
+    const description = document.getElementById('nodeConditionDescription').value.trim();
+    
+    if (!name || !value || !passage) {
+        alert('Please fill in all required fields (Name, Value, and Passage Name)');
+        return;
+    }
+    
+    const nodeCondition = {
+        type: type,
+        name: name,
+        operator: operator,
+        value: value,
+        passage: passage,
+        icon: icon || null,
+        description: description || null
+    };
+    
+    addNodeStateConditionToList(nodeCondition);
+    hideNodeConditionModal();
+}
+
+function addNodeStateConditionToList(condition) {
+    const conditionsList = document.getElementById('nodeConditionsList');
+    
+    const conditionItem = document.createElement('div');
+    conditionItem.className = 'node-state-condition-item';
+    conditionItem.dataset.condition = JSON.stringify(condition);
+    conditionItem.draggable = true;
+    
+    // Add drag and drop event listeners
+    conditionItem.addEventListener('dragstart', handleDragStart);
+    conditionItem.addEventListener('dragover', handleDragOver);
+    conditionItem.addEventListener('drop', handleDrop);
+    conditionItem.addEventListener('dragend', handleDragEnd);
+    
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'drag-handle';
+    dragHandle.innerHTML = '⋮⋮';
+    dragHandle.title = 'Drag to reorder priority';
+    
+    const conditionContent = document.createElement('div');
+    conditionContent.className = 'condition-content';
+    
+    const conditionText = document.createElement('div');
+    conditionText.className = 'condition-text';
+    
+    // Format the condition display text
+    let displayText = `${condition.type} "${condition.name}" ${condition.operator} ${condition.value}`;
+    conditionText.innerHTML = `
+        <strong>If:</strong> ${displayText}<br>
+        <strong>Then:</strong> Use passage "${condition.passage}"${condition.icon ? ` with icon "${condition.icon}"` : ''}
+        ${condition.description ? `<br><em>${condition.description}</em>` : ''}
+    `;
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-condition';
+    removeBtn.textContent = '×';
+    removeBtn.title = 'Remove this condition';
+    removeBtn.addEventListener('click', () => {
+        conditionItem.remove();
+        saveNodeMemory(); // Update memory when condition is removed
+    });
+    
+    conditionContent.appendChild(conditionText);
+    conditionItem.appendChild(dragHandle);
+    conditionItem.appendChild(conditionContent);
+    conditionItem.appendChild(removeBtn);
+    conditionsList.appendChild(conditionItem);
+    
+    saveNodeMemory(); // Update memory when condition is added
+}
+
+function updateNodeStateConditionsList(conditions) {
+    const conditionsList = document.getElementById('nodeConditionsList');
+    conditionsList.innerHTML = '';
+    
+    conditions.forEach(condition => {
+        addNodeStateConditionToList(condition);
+    });
+}
+
+function getCurrentNodeStateConditions() {
+    const conditionItems = document.querySelectorAll('#nodeConditionsList .node-state-condition-item');
+    const conditions = [];
+    
+    conditionItems.forEach(item => {
+        try {
+            const conditionData = JSON.parse(item.dataset.condition);
+            conditions.push(conditionData);
+        } catch (error) {
+            console.error('Error parsing node condition data:', error);
+        }
+    });
+    
+    return conditions;
+}
+
+// Drag and Drop Functions for Priority Ordering
+let draggedElement = null;
+
+function handleDragStart(e) {
+    draggedElement = this;
+    this.style.opacity = '0.5';
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.outerHTML);
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault();
+    }
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+    
+    if (draggedElement !== this) {
+        const parent = this.parentNode;
+        const draggedIndex = Array.from(parent.children).indexOf(draggedElement);
+        const targetIndex = Array.from(parent.children).indexOf(this);
+        
+        if (draggedIndex < targetIndex) {
+            parent.insertBefore(draggedElement, this.nextSibling);
+        } else {
+            parent.insertBefore(draggedElement, this);
+        }
+        
+        saveNodeMemory(); // Update memory when order changes
+    }
+    
+    return false;
+}
+
+function handleDragEnd(e) {
+    this.style.opacity = '';
+    draggedElement = null;
+}
+
+// Update the existing node condition functions to use the new system
+function updateNodeConditionsList(conditions) {
+    updateNodeStateConditionsList(conditions);
+}
+
+function getCurrentNodeConditions() {
+    return getCurrentNodeStateConditions();
+}
+
+function addNodeConditionToList(condition) {
+    // Convert old format to new format if needed
+    if (condition.passage) {
+        addNodeStateConditionToList(condition);
+    } else {
+        // This is an old-style condition, convert it
+        const newCondition = {
+            type: condition.type,
+            name: condition.name || condition.item || condition.quest || condition.variable,
+            operator: '==',
+            value: condition.value || 'true',
+            passage: 'DefaultPassage',
+            icon: null,
+            description: 'Converted from old condition format'
+        };
+        addNodeStateConditionToList(newCondition);
+    }
+}
+
+// Icon selection functionality
+let selectedIcon = '';
+let allIcons = [];
+
+// Initialize icon functionality after Lucide is loaded
+function initializeIconSelection() {
+    const iconSearchInput = document.getElementById('iconSearch');
+    const iconGrid = document.getElementById('iconGrid');
+    const selectedIconName = document.getElementById('selectedIconName');
+    const selectedIconSVG = document.getElementById('selectedIconSVG');
+    
+    // Converts PascalCase / CamelCase to kebab-case (needed for Lucide data-lucide attribute)
+    function toKebabCase(str) {
+        return str
+            .replace(/([a-z0-9])([A-Z])/g, '$1-$2')    // lower/number -> upper boundary
+            .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')  // upper -> upper-lower boundary
+            .toLowerCase();
+    }
+
+    let allIcons = [];
+
+    // Get all available Lucide icons, or fallback
+    if (window.lucide && window.lucide.icons) {
+        allIcons = Object.keys(window.lucide.icons)
+            .map(toKebabCase)
+            .sort(); // Alphabetical sort
+    } else {
+        allIcons = [
+            'home', 'store', 'sword', 'shield', 'key', 'door-open', 'door-closed',
+            'castle', 'tree-pine', 'mountain', 'waves', 'flame', 'zap', 'skull',
+            'gem', 'scroll', 'clock', 'moon', 'sun', 'calendar', 'map', 'compass',
+            'star', 'heart', 'circle', 'square', 'triangle', 'diamond'
+        ];
+    }
+
+    function renderIconGrid(filter = '') {
+        if (!iconGrid) return;
+
+        iconGrid.innerHTML = '';
+
+        const filteredIcons = allIcons.filter(icon => icon.toLowerCase().includes(filter.toLowerCase()));
+
+        if (filteredIcons.length === 0) {
+            iconGrid.innerHTML = '<div class="no-icons">No icons found.</div>';
+            return;
+        }
+
+        filteredIcons.forEach(iconName => {
+            const tile = document.createElement('div');
+            tile.className = 'icon-tile';
+            tile.setAttribute('data-icon', iconName);
+
+            // Create icon element
+            const iconDiv = document.createElement('div');
+            iconDiv.className = 'icon-preview';
+            const iconElement = document.createElement('i');
+            iconElement.setAttribute('data-lucide', iconName);
+            iconDiv.appendChild(iconElement);
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'icon-name';
+            nameDiv.textContent = iconName;
+
+            tile.appendChild(iconDiv);
+            tile.appendChild(nameDiv);
+            tile.addEventListener('click', () => selectIcon(iconName));
+            iconGrid.appendChild(tile);
+        });
+
+        // Re-render Lucide icons
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    }
+
+    function selectIcon(iconName) {
+        selectedIcon = iconName;
+
+        // Update hidden input field
+        const nodeIconInput = document.getElementById('nodeIcon');
+        if (nodeIconInput) {
+            nodeIconInput.value = iconName;
+        }
+
+        if (selectedIconName) {
+            selectedIconName.textContent = iconName;
+        }
+
+        if (selectedIconSVG) {
+            selectedIconSVG.innerHTML = '';
+            const iconElement = document.createElement('i');
+            iconElement.setAttribute('data-lucide', iconName);
+            selectedIconSVG.appendChild(iconElement);
+
+            // Re-render Lucide icons
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+        }
+
+        // Highlight the selected tile
+        document.querySelectorAll('.icon-tile').forEach(tile => {
+            tile.classList.remove('selected');
+        });
+        const selectedTile = document.querySelector(`.icon-tile[data-icon="${iconName}"]`);
+        if (selectedTile) {
+            selectedTile.classList.add('selected');
+        }
+
+        // Save to memory if editing a node
+        if (typeof currentEditingNode !== 'undefined' && currentEditingNode) {
+            saveNodeMemory();
+        }
+    }
+
+    if (iconSearchInput) {
+        iconSearchInput.addEventListener('input', (e) => {
+            renderIconGrid(e.target.value);
+        });
+    }
+
+    // Initialize the grid on load
+    renderIconGrid();
+
+    // Expose functions globally
+    window.updateIconSelection = function(iconName) {
+        if (iconName && allIcons.includes(iconName)) {
+            selectIcon(iconName);
+        }
+    };
+
+    window.clearIconSelection = function() {
+        selectedIcon = '';
+
+        const nodeIconInput = document.getElementById('nodeIcon');
+        if (nodeIconInput) {
+            nodeIconInput.value = '';
+        }
+
+        if (selectedIconName) {
+            selectedIconName.textContent = 'None Selected';
+        }
+
+        if (selectedIconSVG) {
+            selectedIconSVG.innerHTML = '';
+        }
+
+        // Clear all selected tiles
+        document.querySelectorAll('.icon-tile').forEach(tile => {
+            tile.classList.remove('selected');
+        });
+    };
+
+    window.renderIconGrid = renderIconGrid;
+    window.selectIcon = selectIcon;
+}
+
+
+
 // Replace original functions with enhanced versions
 editNode = editNodeWithMemory;
 saveNode = saveNodeEnhanced;
 handleConditionSubmit = handleConditionSubmitEnhanced;
+
+// Condition Icon Selection functionality
+let selectedConditionIcon = '';
+
+function initializeConditionIconSelection() {
+    const conditionIconSearchInput = document.getElementById('conditionIconSearch');
+    const conditionIconGrid = document.getElementById('conditionIconGrid');
+    const selectedConditionIconName = document.getElementById('selectedConditionIconName');
+    const selectedConditionIconSVG = document.getElementById('selectedConditionIconSVG');
+    
+    // Converts PascalCase / CamelCase to kebab-case (needed for Lucide data-lucide attribute)
+    function toKebabCase(str) {
+        return str
+            .replace(/([a-z0-9])([A-Z])/g, '$1-$2')    // lower/number -> upper boundary
+            .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')  // upper -> upper-lower boundary
+            .toLowerCase();
+    }
+
+    let allConditionIcons = [];
+
+    // Get all available Lucide icons, or fallback
+    if (window.lucide && window.lucide.icons) {
+        allConditionIcons = Object.keys(window.lucide.icons)
+            .map(toKebabCase)
+            .sort(); // Alphabetical sort
+    } else {
+        allConditionIcons = [
+            'home', 'store', 'sword', 'shield', 'key', 'door-open', 'door-closed',
+            'castle', 'tree-pine', 'mountain', 'waves', 'flame', 'zap', 'skull',
+            'gem', 'scroll', 'clock', 'moon', 'sun', 'calendar', 'map', 'compass',
+            'star', 'heart', 'circle', 'square', 'triangle', 'diamond'
+        ];
+    }
+
+    function renderConditionIconGrid(filter = '') {
+        if (!conditionIconGrid) return;
+
+        conditionIconGrid.innerHTML = '';
+
+        const filteredIcons = allConditionIcons.filter(icon => icon.toLowerCase().includes(filter.toLowerCase()));
+
+        if (filteredIcons.length === 0) {
+            conditionIconGrid.innerHTML = '<div class="no-icons">No icons found.</div>';
+            return;
+        }
+
+        filteredIcons.forEach(iconName => {
+            const tile = document.createElement('div');
+            tile.className = 'icon-tile';
+            tile.setAttribute('data-icon', iconName);
+
+            // Create icon element
+            const iconDiv = document.createElement('div');
+            iconDiv.className = 'icon-preview';
+            const iconElement = document.createElement('i');
+            iconElement.setAttribute('data-lucide', iconName);
+            iconDiv.appendChild(iconElement);
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'icon-name';
+            nameDiv.textContent = iconName;
+
+            tile.appendChild(iconDiv);
+            tile.appendChild(nameDiv);
+            tile.addEventListener('click', () => selectConditionIcon(iconName));
+            conditionIconGrid.appendChild(tile);
+        });
+
+        // Re-render Lucide icons
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    }
+
+    function selectConditionIcon(iconName) {
+        selectedConditionIcon = iconName;
+
+        // Update hidden input field
+        const nodeConditionIconInput = document.getElementById('nodeConditionIcon');
+        if (nodeConditionIconInput) {
+            nodeConditionIconInput.value = iconName;
+        }
+
+        if (selectedConditionIconName) {
+            selectedConditionIconName.textContent = iconName;
+        }
+
+        if (selectedConditionIconSVG) {
+            selectedConditionIconSVG.innerHTML = '';
+            const iconElement = document.createElement('i');
+            iconElement.setAttribute('data-lucide', iconName);
+            selectedConditionIconSVG.appendChild(iconElement);
+
+            // Re-render Lucide icons
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+        }
+
+        // Highlight the selected tile
+        document.querySelectorAll('#conditionIconGrid .icon-tile').forEach(tile => {
+            tile.classList.remove('selected');
+        });
+        const selectedTile = document.querySelector(`#conditionIconGrid .icon-tile[data-icon="${iconName}"]`);
+        if (selectedTile) {
+            selectedTile.classList.add('selected');
+        }
+    }
+
+    if (conditionIconSearchInput) {
+        conditionIconSearchInput.addEventListener('input', (e) => {
+            renderConditionIconGrid(e.target.value);
+        });
+    }
+
+    // Expose functions globally
+    window.renderConditionIconGrid = renderConditionIconGrid;
+    window.selectConditionIcon = selectConditionIcon;
+    window.clearConditionIconSelection = function() {
+        selectedConditionIcon = '';
+
+        const nodeConditionIconInput = document.getElementById('nodeConditionIcon');
+        if (nodeConditionIconInput) {
+            nodeConditionIconInput.value = '';
+        }
+
+        if (selectedConditionIconName) {
+            selectedConditionIconName.textContent = 'No Icon Selected';
+        }
+
+        if (selectedConditionIconSVG) {
+            selectedConditionIconSVG.innerHTML = '';
+        }
+
+        // Clear all selected tiles
+        document.querySelectorAll('#conditionIconGrid .icon-tile').forEach(tile => {
+            tile.classList.remove('selected');
+        });
+    };
+
+    // Initialize the grid on load
+    renderConditionIconGrid();
+}
+
+// Initialize icon selection when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    // Wait a bit for Lucide to load
+    setTimeout(() => {
+        initializeIconSelection();
+        initializeConditionIconSelection();
+    }, 100);
+});

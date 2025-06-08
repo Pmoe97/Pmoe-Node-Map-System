@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
+
 <body>
     <!-- Initial Setup Modal -->
     <div id="setupModal" class="modal">
@@ -68,24 +69,16 @@
                         </div>
                         <div class="form-group">
                             <label for="nodeIcon">Icon:</label>
-                            <select id="nodeIcon">
-                                <option value="">Select Icon</option>
-                                <option value="home">Home</option>
-                                <option value="store">Store</option>
-                                <option value="sword">Sword</option>
-                                <option value="shield">Shield</option>
-                                <option value="key">Key</option>
-                                <option value="door-open">Door</option>
-                                <option value="castle">Castle</option>
-                                <option value="tree-pine">Forest</option>
-                                <option value="mountain">Mountain</option>
-                                <option value="waves">Water</option>
-                                <option value="flame">Fire</option>
-                                <option value="zap">Lightning</option>
-                                <option value="skull">Danger</option>
-                                <option value="gem">Treasure</option>
-                                <option value="scroll">Scroll</option>
-                            </select>
+                            <!-- Hidden input to store selected icon -->
+                            <input type="hidden" id="nodeIcon">
+                            <!-- Selected Icon Display -->
+                            <div id="selectedIconPreview" class="selected-icon-preview">
+                                <span id="selectedIconName">None Selected</span>
+                                <div id="selectedIconSVG"></div>
+                            </div>
+                            <!-- Icon Search and Grid -->
+                            <input type="text" id="iconSearch" placeholder="Search icons...">
+                            <div id="iconGrid" class="icon-grid"></div>
                         </div>
                         <div class="form-group">
                             <label>
@@ -109,8 +102,11 @@
                         <div class="form-group">
                             <label for="transitionType">Transition Type:</label>
                             <select id="transitionType">
-                                <option value="bi">Bidirectional</option>
-                                <option value="oneway">One-way</option>
+                                <option value="none">None</option>
+                                <option value="bidirectional">Bidirectional</option>
+                                <option value="one-way">One-Way</option>
+                                <option value="locked">Locked</option>
+                                <option value="secret">Secret</option>
                             </select>
                         </div>
                         <div id="directionGroup" class="form-group hidden">
@@ -125,23 +121,33 @@
                         <div class="form-group">
                             <label>Conditions:</label>
                             <div id="conditionsList"></div>
-                            <button id="addCondition">Add Condition</button>
+                            <button type="button" id="addCondition">Add Condition</button>
                         </div>
                         <div class="form-actions">
                             <button id="saveTransition">Save Transition</button>
                             <button id="removeTransition">Remove Transition</button>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
+                    <!-- End Transition Editor -->
+                </div> <!-- End Sidebar Content -->
+            </div> <!-- End Sidebar -->
+        </div> <!-- End Editor Container -->
+    </div> <!-- End Main Interface -->
 
-    <!-- Condition Modal -->
+
+    <!-- Transition Condition Modal -->
     <div id="conditionModal" class="modal hidden">
         <div class="modal-content">
-            <h3>Add Condition</h3>
+            <h3>Add Transition Condition</h3>
             <form id="conditionForm">
+                <div class="form-group">
+                    <label for="conditionAction">Action:</label>
+                    <select id="conditionAction" required>
+                        <option value="lockIf">Lock If</option>
+                        <option value="unlockIf">Unlock If</option>
+                        <option value="changeIf">Change If</option>
+                    </select>
+                </div>
                 <div class="form-group">
                     <label for="conditionType">Condition Type:</label>
                     <select id="conditionType" required>
@@ -151,12 +157,33 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="conditionValue">Value:</label>
-                    <input type="text" id="conditionValue" required>
+                    <label for="conditionName">Name:</label>
+                    <input type="text" id="conditionName" required placeholder="Item/Quest/Variable name">
                 </div>
-                <div id="variableValueGroup" class="form-group hidden">
-                    <label for="variableValue">Variable Value:</label>
-                    <input type="text" id="variableValue">
+                <div class="form-group">
+                    <label for="conditionOperator">Operator:</label>
+                    <select id="conditionOperator" required>
+                        <option value="==">==(equals)</option>
+                        <option value="!=">!=(not equals)</option>
+                        <option value="<">&lt;(less than)</option>
+                        <option value=">">&gt;(greater than)</option>
+                        <option value="<=">&lt;=(less than or equal)</option>
+                        <option value=">=">&gt;=(greater than or equal)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="conditionValue">Value:</label>
+                    <input type="text" id="conditionValue" required placeholder="Target value to check against">
+                </div>
+                <div id="changeTargetGroup" class="form-group hidden">
+                    <label for="changeTarget">Change To:</label>
+                    <select id="changeTarget">
+                        <option value="none">None</option>
+                        <option value="bidirectional">Bidirectional</option>
+                        <option value="one-way">One-Way</option>
+                        <option value="locked">Locked</option>
+                        <option value="secret">Secret</option>
+                    </select>
                 </div>
                 <div class="form-actions">
                     <button type="submit">Add</button>
@@ -165,6 +192,69 @@
             </form>
         </div>
     </div>
+
+<!-- Node Condition Modal -->
+<div id="nodeConditionModal" class="modal hidden">
+    <div class="modal-content">
+        <h3>Add Node State Condition</h3>
+        <form id="nodeConditionForm">
+            <div class="form-group">
+                <label for="nodeConditionType">Condition Type:</label>
+                <select id="nodeConditionType" required>
+                    <option value="item">Item</option>
+                    <option value="quest">Quest</option>
+                    <option value="variable">Variable</option>
+                    <option value="time">Time/Date</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="nodeConditionName">Name:</label>
+                <input type="text" id="nodeConditionName" required placeholder="Item/Quest/Variable/Time name">
+            </div>
+            <div class="form-group">
+                <label for="nodeConditionOperator">Operator:</label>
+                <select id="nodeConditionOperator" required>
+                    <option value="==">==(equals)</option>
+                    <option value="!=">!=(not equals)</option>
+                    <option value="<">&lt;(less than)</option>
+                    <option value=">">&gt;(greater than)</option>
+                    <option value="<=">&lt;=(less than or equal)</option>
+                    <option value=">=">&gt;=(greater than or equal)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="nodeConditionValue">Value:</label>
+                <input type="text" id="nodeConditionValue" required placeholder="Target value to check against">
+            </div>
+            <div class="form-group">
+                <label for="nodeConditionPassage">Passage Name:</label>
+                <input type="text" id="nodeConditionPassage" required placeholder="Passage to use when condition is met">
+            </div>
+            <div class="form-group">
+                <label>Icon (optional):</label>
+                <!-- Hidden input to store selected icon -->
+                <input type="hidden" id="nodeConditionIcon">
+                <!-- Selected Icon Display -->
+                <div id="selectedConditionIconPreview" class="selected-icon-preview">
+                    <span id="selectedConditionIconName">No Icon Selected</span>
+                    <div id="selectedConditionIconSVG"></div>
+                </div>
+                <!-- Icon Search and Grid -->
+                <input type="text" id="conditionIconSearch" placeholder="Search icons...">
+                <div id="conditionIconGrid" class="icon-grid"></div>
+            </div>
+            <div class="form-group">
+                <label for="nodeConditionDescription">Description (optional):</label>
+                <input type="text" id="nodeConditionDescription" placeholder="Brief description of this state">
+            </div>
+            <div class="form-actions">
+                <button type="submit">Add State</button>
+                <button type="button" id="cancelNodeCondition">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 
     <!-- Hidden file input for importing maps -->
     <input type="file" id="fileInput" accept=".json" style="display: none;">

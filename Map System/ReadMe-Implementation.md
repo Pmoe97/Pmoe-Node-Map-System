@@ -1,6 +1,6 @@
 # Twine Map System - Complete Implementation Guide
 
-A comprehensive grid-based navigation system for Twine 2 / SugarCube 2 projects with visual minimap, keyboard controls, fog of war, and conditional transitions.
+A comprehensive grid-based navigation system for Twine 2 / SugarCube 2 projects with visual minimap, keyboard controls, fog of war, and conditional transitions. This Node-Network style system was inspired by Fenoxo's map system in games like Trials in Tainted Space. 
 
 ## Table of Contents
 
