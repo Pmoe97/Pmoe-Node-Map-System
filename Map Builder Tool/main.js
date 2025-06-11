@@ -21,6 +21,11 @@ const AUTO_SAVE_DELAY = 2000; // 2 seconds
 // Condition modal context
 let conditionModalContext = null; // 'node' or 'transition'
 
+// Import placement state
+let placementMode = false;
+let pendingImportData = null;
+let placementPreviewData = null;
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
@@ -44,6 +49,7 @@ function setupEventListeners() {
     // Toolbar buttons
     document.getElementById('newMapBtn').addEventListener('click', showSetupModal);
     document.getElementById('importBtn').addEventListener('click', importMap);
+    document.getElementById('importMapFromStart').addEventListener('click', importMap);
     document.getElementById('exportBtn').addEventListener('click', exportMap);
     document.getElementById('exportTwBtn').addEventListener('click', exportTwineFile);
     document.getElementById('themeToggle').addEventListener('click', toggleTheme);
@@ -77,6 +83,12 @@ function setupEventListeners() {
     
     // Auto-save setup
     setupAutoSave();
+    
+    // Import choice modal event listeners
+    setupImportChoiceListeners();
+    
+    // Placement mode event listeners
+    setupPlacementListeners();
 }
 
 function showSetupModal() {
@@ -421,7 +433,7 @@ function saveTransition() {
     
     mapData.transitions.set(transitionKey, {
         type: type,
-        direction: type === 'oneway' ? direction : null,
+        direction: type === 'one-way' ? direction : null,
         conditions: conditions
     });
     
@@ -460,12 +472,6 @@ function updateSurroundingCells(col, row) {
             updateTransitionConnectors(newCol, newRow);
         }
     });
-}
-
-function showConditionModal() {
-    document.getElementById('conditionModal').classList.remove('hidden');
-    document.getElementById('conditionForm').reset();
-    handleConditionTypeChange();
 }
 
 function hideConditionModal() {
@@ -615,6 +621,10 @@ function exportMap() {
     const exportData = {
         mapId: mapData.name.toLowerCase().replace(/\s+/g, '_'),
         name: mapData.name,
+        gridSize: {
+            width: mapData.width,
+            height: mapData.height
+        },
         defaultStart: defaultStart,
         nodes: []
     };
@@ -709,25 +719,45 @@ function loadImportedMap(importedData) {
         return;
     }
     
-    // Determine grid size from nodes
+    // Determine grid size from nodes or use provided gridSize
     let maxCol = 0, maxRow = 0;
-    importedData.nodes.forEach(node => {
-        if (node.column > maxCol) maxCol = node.column;
-        if (node.row > maxRow) maxRow = node.row;
-    });
+    let width = 5, height = 5; // defaults
+    
+    // Check if gridSize is provided in the import data
+    if (importedData.gridSize) {
+        width = importedData.gridSize.width;
+        height = importedData.gridSize.height;
+    } else {
+        // Calculate from node positions
+        importedData.nodes.forEach(node => {
+            // Handle both formats: {x, y} and {column, row}
+            const col = node.x !== undefined ? node.x : node.column;
+            const row = node.y !== undefined ? node.y : node.row;
+            
+            if (col > maxCol) maxCol = col;
+            if (row > maxRow) maxRow = row;
+        });
+        
+        width = Math.max(maxCol + 1, 5);
+        height = Math.max(maxRow + 1, 5);
+    }
     
     // Create new map with imported data
     mapData = {
         name: importedData.name,
-        width: Math.max(maxCol + 1, 5),
-        height: Math.max(maxRow + 1, 5),
+        width: width,
+        height: height,
         nodes: new Map(),
         transitions: new Map()
     };
     
     // Load nodes
     importedData.nodes.forEach(node => {
-        const nodeKey = `${node.column},${node.row}`;
+        // Handle both formats: {x, y} and {column, row}
+        const col = node.x !== undefined ? node.x : node.column;
+        const row = node.y !== undefined ? node.y : node.row;
+        
+        const nodeKey = `${col},${row}`;
         mapData.nodes.set(nodeKey, {
             name: node.name || '',
             passage: node.passage || '',
@@ -739,8 +769,8 @@ function loadImportedMap(importedData) {
         // Load transitions
         if (node.transitions) {
             Object.entries(node.transitions).forEach(([direction, transition]) => {
-                let targetCol = node.column;
-                let targetRow = node.row;
+                let targetCol = col;
+                let targetRow = row;
                 
                 switch (direction) {
                     case 'north': targetRow--; break;
@@ -749,9 +779,9 @@ function loadImportedMap(importedData) {
                     case 'west': targetCol--; break;
                 }
                 
-                const transitionKey = `${node.column},${node.row}-${targetCol},${targetRow}`;
+                const transitionKey = `${col},${row}-${targetCol},${targetRow}`;
                 mapData.transitions.set(transitionKey, {
-                    type: transition.type || 'bi',
+                    type: transition.type || 'bidirectional',
                     direction: transition.direction || null,
                     conditions: transition.conditions || []
                 });
@@ -847,7 +877,7 @@ function showConditionModal(context) {
     conditionModalContext = context;
     document.getElementById('conditionModal').classList.remove('hidden');
     document.getElementById('conditionForm').reset();
-    handleConditionTypeChange();
+    handleConditionActionChange();
 }
 
 function handleConditionSubmitEnhanced(e) {
@@ -1618,6 +1648,351 @@ function initializeConditionIconSelection() {
     // Initialize the grid on load
     renderConditionIconGrid();
 }
+
+// Import Choice Modal Functions
+function setupImportChoiceListeners() {
+    document.getElementById('importFreshWorkspace').addEventListener('click', handleImportFreshWorkspace);
+    document.getElementById('importAddToWorkspace').addEventListener('click', handleImportAddToWorkspace);
+    document.getElementById('cancelImportChoice').addEventListener('click', hideImportChoiceModal);
+}
+
+function showImportChoiceModal() {
+    document.getElementById('importChoiceModal').classList.remove('hidden');
+}
+
+function hideImportChoiceModal() {
+    document.getElementById('importChoiceModal').classList.add('hidden');
+    pendingImportData = null;
+}
+
+function handleImportFreshWorkspace() {
+    if (pendingImportData) {
+        loadImportedMap(pendingImportData);
+        hideImportChoiceModal();
+    }
+}
+
+function handleImportAddToWorkspace() {
+    if (pendingImportData) {
+        startPlacementMode(pendingImportData);
+        hideImportChoiceModal();
+    }
+}
+
+// Placement Mode Functions
+function setupPlacementListeners() {
+    document.getElementById('confirmPlacement').addEventListener('click', confirmPlacement);
+    document.getElementById('cancelPlacement').addEventListener('click', cancelPlacement);
+}
+
+function startPlacementMode(importData) {
+    placementMode = true;
+    pendingImportData = importData;
+    
+    // Calculate import data dimensions
+    let minCol = Infinity, maxCol = -Infinity;
+    let minRow = Infinity, maxRow = -Infinity;
+    
+    importData.nodes.forEach(node => {
+        const col = node.x !== undefined ? node.x : node.column;
+        const row = node.y !== undefined ? node.y : node.row;
+        
+        minCol = Math.min(minCol, col);
+        maxCol = Math.max(maxCol, col);
+        minRow = Math.min(minRow, row);
+        maxRow = Math.max(maxRow, row);
+    });
+    
+    placementPreviewData = {
+        width: maxCol - minCol + 1,
+        height: maxRow - minRow + 1,
+        minCol: minCol,
+        minRow: minRow,
+        nodes: importData.nodes
+    };
+    
+    // Update UI
+    document.getElementById('placementMapSize').textContent = `${placementPreviewData.width} × ${placementPreviewData.height}`;
+    document.getElementById('placementControls').classList.remove('hidden');
+    document.getElementById('mapGrid').classList.add('placement-mode');
+    
+    // Add hover listeners to grid cells
+    setupPlacementHoverListeners();
+}
+
+function setupPlacementHoverListeners() {
+    const cells = document.querySelectorAll('.grid-cell');
+    cells.forEach(cell => {
+        cell.addEventListener('mouseenter', handlePlacementHover);
+        cell.addEventListener('mouseleave', clearPlacementPreview);
+        cell.addEventListener('click', handlePlacementClick);
+    });
+}
+
+function handlePlacementHover(event) {
+    if (!placementMode || !placementPreviewData) return;
+    
+    const targetCol = parseInt(event.target.dataset.col);
+    const targetRow = parseInt(event.target.dataset.row);
+    
+    clearPlacementPreview();
+    
+    // Calculate placement bounds
+    const offsetCol = targetCol - placementPreviewData.minCol;
+    const offsetRow = targetRow - placementPreviewData.minRow;
+    
+    let canPlace = true;
+    let hasConflicts = false;
+    const previewCells = [];
+    
+    // Check each node in the import data
+    placementPreviewData.nodes.forEach(node => {
+        const nodeCol = node.x !== undefined ? node.x : node.column;
+        const nodeRow = node.y !== undefined ? node.y : node.row;
+        
+        const newCol = nodeCol + offsetCol;
+        const newRow = nodeRow + offsetRow;
+        
+        // Check if within bounds
+        if (newCol < 0 || newCol >= mapData.width || newRow < 0 || newRow >= mapData.height) {
+            canPlace = false;
+            return;
+        }
+        
+        const cell = document.querySelector(`[data-col="${newCol}"][data-row="${newRow}"]`);
+        if (cell) {
+            previewCells.push({ cell, newCol, newRow });
+            
+            // Check for conflicts (existing nodes with data)
+            const existingNodeKey = `${newCol},${newRow}`;
+            if (mapData.nodes.has(existingNodeKey)) {
+                hasConflicts = true;
+            }
+        }
+    });
+    
+    // Update preview cells
+    previewCells.forEach(({ cell }) => {
+        if (!canPlace) {
+            cell.classList.add('placement-invalid');
+        } else if (hasConflicts) {
+            cell.classList.add('placement-conflict');
+        } else {
+            cell.classList.add('placement-preview');
+        }
+    });
+    
+    // Update status and position
+    document.getElementById('placementPosition').textContent = `(${targetCol}, ${targetRow})`;
+    
+    const statusElement = document.getElementById('placementStatus');
+    const confirmButton = document.getElementById('confirmPlacement');
+    
+    if (!canPlace) {
+        statusElement.textContent = 'Cannot place here - extends beyond grid bounds';
+        statusElement.className = 'placement-status invalid';
+        confirmButton.disabled = true;
+    } else if (hasConflicts) {
+        statusElement.textContent = 'Warning: Will overwrite existing nodes';
+        statusElement.className = 'placement-status conflict';
+        confirmButton.disabled = false;
+    } else {
+        statusElement.textContent = 'Valid placement location';
+        statusElement.className = 'placement-status valid';
+        confirmButton.disabled = false;
+    }
+    
+    // Store current placement data
+    placementPreviewData.currentPlacement = {
+        targetCol,
+        targetRow,
+        offsetCol,
+        offsetRow,
+        canPlace,
+        hasConflicts
+    };
+}
+
+function clearPlacementPreview() {
+    const cells = document.querySelectorAll('.grid-cell');
+    cells.forEach(cell => {
+        cell.classList.remove('placement-preview', 'placement-invalid', 'placement-conflict');
+    });
+}
+
+function handlePlacementClick(event) {
+    if (!placementMode || !placementPreviewData || !placementPreviewData.currentPlacement) return;
+    
+    const { canPlace, hasConflicts } = placementPreviewData.currentPlacement;
+    
+    if (!canPlace) return;
+    
+    if (hasConflicts) {
+        const confirmed = confirm('This will overwrite existing nodes. Continue?');
+        if (!confirmed) return;
+    }
+    
+    // Enable confirm button and highlight the selection
+    document.getElementById('confirmPlacement').disabled = false;
+    document.getElementById('placementStatus').textContent = 'Click "Confirm Placement" to finalize';
+    document.getElementById('placementStatus').className = 'placement-status valid';
+}
+
+function confirmPlacement() {
+    if (!placementMode || !placementPreviewData || !placementPreviewData.currentPlacement) return;
+    
+    const { targetCol, targetRow, offsetCol, offsetRow, canPlace } = placementPreviewData.currentPlacement;
+    
+    if (!canPlace) return;
+    
+    // Check if we need to expand the grid
+    let needsExpansion = false;
+    let newWidth = mapData.width;
+    let newHeight = mapData.height;
+    
+    placementPreviewData.nodes.forEach(node => {
+        const nodeCol = node.x !== undefined ? node.x : node.column;
+        const nodeRow = node.y !== undefined ? node.y : node.row;
+        
+        const newCol = nodeCol + offsetCol;
+        const newRow = nodeRow + offsetRow;
+        
+        if (newCol >= mapData.width) {
+            newWidth = Math.max(newWidth, newCol + 1);
+            needsExpansion = true;
+        }
+        if (newRow >= mapData.height) {
+            newHeight = Math.max(newHeight, newRow + 1);
+            needsExpansion = true;
+        }
+    });
+    
+    // Expand grid if necessary
+    if (needsExpansion) {
+        mapData.width = newWidth;
+        mapData.height = newHeight;
+        generateGrid(); // Regenerate grid with new size
+    }
+    
+    // Place the nodes
+    placementPreviewData.nodes.forEach(node => {
+        const nodeCol = node.x !== undefined ? node.x : node.column;
+        const nodeRow = node.y !== undefined ? node.y : node.row;
+        
+        const newCol = nodeCol + offsetCol;
+        const newRow = nodeRow + offsetRow;
+        const nodeKey = `${newCol},${newRow}`;
+        
+        // Add the node
+        mapData.nodes.set(nodeKey, {
+            name: node.name || '',
+            passage: node.passage || '',
+            icon: node.icon || '',
+            fogOfWar: node.fogOfWar || false,
+            conditions: node.conditions || []
+        });
+        
+        // Add transitions
+        if (node.transitions) {
+            Object.entries(node.transitions).forEach(([direction, transition]) => {
+                let targetCol = newCol;
+                let targetRow = newRow;
+                
+                switch (direction) {
+                    case 'north': targetRow--; break;
+                    case 'south': targetRow++; break;
+                    case 'east': targetCol++; break;
+                    case 'west': targetCol--; break;
+                }
+                
+                const transitionKey = `${newCol},${newRow}-${targetCol},${targetRow}`;
+                mapData.transitions.set(transitionKey, {
+                    type: transition.type || 'bidirectional',
+                    direction: transition.direction || null,
+                    conditions: transition.conditions || []
+                });
+            });
+        }
+    });
+    
+    // Update the grid display
+    if (!needsExpansion) {
+        // Just update the affected cells
+        placementPreviewData.nodes.forEach(node => {
+            const nodeCol = node.x !== undefined ? node.x : node.column;
+            const nodeRow = node.y !== undefined ? node.y : node.row;
+            
+            const newCol = nodeCol + offsetCol;
+            const newRow = nodeRow + offsetRow;
+            
+            const cell = document.querySelector(`[data-col="${newCol}"][data-row="${newRow}"]`);
+            if (cell) {
+                updateCellDisplay(cell, newCol, newRow);
+            }
+        });
+    }
+    
+    cancelPlacement();
+    alert('Map section placed successfully!');
+}
+
+function cancelPlacement() {
+    placementMode = false;
+    pendingImportData = null;
+    placementPreviewData = null;
+    
+    document.getElementById('placementControls').classList.add('hidden');
+    document.getElementById('mapGrid').classList.remove('placement-mode');
+    
+    clearPlacementPreview();
+    
+    // Remove hover listeners
+    const cells = document.querySelectorAll('.grid-cell');
+    cells.forEach(cell => {
+        cell.removeEventListener('mouseenter', handlePlacementHover);
+        cell.removeEventListener('mouseleave', clearPlacementPreview);
+        cell.removeEventListener('click', handlePlacementClick);
+    });
+}
+
+// Modified import function to handle choice modal
+function handleFileImportEnhanced(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const importedData = JSON.parse(e.target.result);
+            
+            // Validate imported data structure
+            if (!importedData.name || !importedData.nodes || !Array.isArray(importedData.nodes)) {
+                alert('Invalid map file format');
+                return;
+            }
+            
+            pendingImportData = importedData;
+            
+            // Check if we have an existing map
+            if (mapData.nodes.size > 0) {
+                showImportChoiceModal();
+            } else {
+                loadImportedMap(importedData);
+            }
+        } catch (error) {
+            alert('Error reading file: Invalid JSON format');
+            console.error('Import error:', error);
+        }
+    };
+    reader.readAsText(file);
+    
+    // Reset file input
+    event.target.value = '';
+}
+
+// Replace the original file import handler
+document.getElementById('fileInput').removeEventListener('change', handleFileImport);
+document.getElementById('fileInput').addEventListener('change', handleFileImportEnhanced);
 
 // Initialize icon selection when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {

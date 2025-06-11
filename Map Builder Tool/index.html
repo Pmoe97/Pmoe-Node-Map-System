@@ -26,7 +26,10 @@
                     <label for="mapHeight">Map Height (rows):</label>
                     <input type="number" id="mapHeight" min="3" max="20" value="5" required>
                 </div>
-                <button type="submit">Create Map</button>
+                <div class="form-actions">
+                    <button type="submit">Create Map</button>
+                    <button type="button" id="importMapFromStart">Import Map</button>
+                </div>
             </form>
         </div>
     </div>
@@ -255,6 +258,41 @@
     </div>
 </div>
 
+
+    <!-- Import Choice Modal -->
+    <div id="importChoiceModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Import Map</h3>
+            <p>You have an existing map open. How would you like to import the new map?</p>
+            <div class="form-actions">
+                <button id="importFreshWorkspace" class="fresh-workspace-btn">Open Fresh Workspace</button>
+                <button id="importAddToWorkspace" class="add-workspace-btn">Add to Current Workspace</button>
+                <button id="cancelImportChoice" class="cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Placement Controls (shown during placement mode) -->
+    <div id="placementControls" class="placement-controls hidden">
+        <h4>Place Map Section</h4>
+        <div class="placement-info">
+            <div class="info-item">
+                <span>Map Size:</span>
+                <span id="placementMapSize">-</span>
+            </div>
+            <div class="info-item">
+                <span>Position:</span>
+                <span id="placementPosition">-</span>
+            </div>
+        </div>
+        <div id="placementStatus" class="placement-status">
+            Hover over the grid to place the map section
+        </div>
+        <div class="form-actions">
+            <button id="confirmPlacement" class="confirm-btn" disabled>Confirm Placement</button>
+            <button id="cancelPlacement" class="cancel-btn">Cancel</button>
+        </div>
+    </div>
 
     <!-- Hidden file input for importing maps -->
     <input type="file" id="fileInput" accept=".json" style="display: none;">
