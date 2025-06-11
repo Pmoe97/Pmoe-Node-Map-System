@@ -306,7 +306,6 @@ header h1 {
 
 .transition-connector.locked {
     background-color: var(--warning-color);
-    position: relative;
 }
 
 .transition-connector.locked::after {

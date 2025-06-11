@@ -69,7 +69,15 @@ function setupEventListeners() {
     
     // Transition condition management
     document.getElementById('addCondition').addEventListener('click', () => showConditionModal('transition'));
-    document.getElementById('conditionForm').addEventListener('submit', handleConditionSubmit);
+   
+    document.getElementById('conditionForm').addEventListener('submit', (e) => {
+        if (conditionModalContext === 'node') {
+            handleConditionSubmitEnhanced(e);
+        } else {
+            handleConditionSubmit(e);
+        }
+    });
+
     document.getElementById('cancelCondition').addEventListener('click', hideConditionModal);
     document.getElementById('conditionAction').addEventListener('change', handleConditionActionChange);
     
@@ -792,6 +800,13 @@ function loadImportedMap(importedData) {
     // Update UI
     document.getElementById('mapTitle').textContent = `Twine Map Editor - ${mapData.name}`;
     generateGrid();
+    // Refresh all connectors to reflect current transition types
+    for (let row = 0; row < mapData.height; row++) {
+        for (let col = 0; col < mapData.width; col++) {
+            updateTransitionConnectors(col, row);
+        }
+    }
+
     closeSidebar();
     hideSetupModal();
     
@@ -1504,7 +1519,7 @@ function initializeIconSelection() {
 // Replace original functions with enhanced versions
 editNode = editNodeWithMemory;
 saveNode = saveNodeEnhanced;
-handleConditionSubmit = handleConditionSubmitEnhanced;
+
 
 // Condition Icon Selection functionality
 let selectedConditionIcon = '';
@@ -1687,6 +1702,7 @@ function setupPlacementListeners() {
 
 function startPlacementMode(importData) {
     placementMode = true;
+    placementFinalized = false;
     pendingImportData = importData;
     
     // Calculate import data dimensions
@@ -1730,48 +1746,53 @@ function setupPlacementHoverListeners() {
 }
 
 function handlePlacementHover(event) {
-    if (!placementMode || !placementPreviewData) return;
-    
+    if (!placementMode || !placementPreviewData || placementFinalized) return;
+
     const targetCol = parseInt(event.target.dataset.col);
     const targetRow = parseInt(event.target.dataset.row);
-    
+
     clearPlacementPreview();
-    
-    // Calculate placement bounds
+
+    // Calculate placement offset
     const offsetCol = targetCol - placementPreviewData.minCol;
     const offsetRow = targetRow - placementPreviewData.minRow;
-    
+
     let canPlace = true;
     let hasConflicts = false;
+    let requiresExpansion = false;
     const previewCells = [];
-    
+
     // Check each node in the import data
     placementPreviewData.nodes.forEach(node => {
         const nodeCol = node.x !== undefined ? node.x : node.column;
         const nodeRow = node.y !== undefined ? node.y : node.row;
-        
+
         const newCol = nodeCol + offsetCol;
         const newRow = nodeRow + offsetRow;
-        
-        // Check if within bounds
-        if (newCol < 0 || newCol >= mapData.width || newRow < 0 || newRow >= mapData.height) {
+
+        // Out-of-bounds negative coordinates are invalid
+        if (newCol < 0 || newRow < 0) {
             canPlace = false;
             return;
         }
-        
+
+        // If node exceeds current grid, mark for potential expansion
+        if (newCol >= mapData.width || newRow >= mapData.height) {
+            requiresExpansion = true;
+        }
+
         const cell = document.querySelector(`[data-col="${newCol}"][data-row="${newRow}"]`);
         if (cell) {
             previewCells.push({ cell, newCol, newRow });
-            
-            // Check for conflicts (existing nodes with data)
+
             const existingNodeKey = `${newCol},${newRow}`;
             if (mapData.nodes.has(existingNodeKey)) {
                 hasConflicts = true;
             }
         }
     });
-    
-    // Update preview cells
+
+    // Update visual feedback
     previewCells.forEach(({ cell }) => {
         if (!canPlace) {
             cell.classList.add('placement-invalid');
@@ -1781,17 +1802,20 @@ function handlePlacementHover(event) {
             cell.classList.add('placement-preview');
         }
     });
-    
-    // Update status and position
+
+    // UI Feedback
     document.getElementById('placementPosition').textContent = `(${targetCol}, ${targetRow})`;
-    
     const statusElement = document.getElementById('placementStatus');
     const confirmButton = document.getElementById('confirmPlacement');
-    
+
     if (!canPlace) {
-        statusElement.textContent = 'Cannot place here - extends beyond grid bounds';
+        statusElement.textContent = 'Cannot place here - invalid location';
         statusElement.className = 'placement-status invalid';
         confirmButton.disabled = true;
+    } else if (requiresExpansion) {
+        statusElement.textContent = 'Valid placement - grid will expand to fit';
+        statusElement.className = 'placement-status valid';
+        confirmButton.disabled = false;
     } else if (hasConflicts) {
         statusElement.textContent = 'Warning: Will overwrite existing nodes';
         statusElement.className = 'placement-status conflict';
@@ -1801,17 +1825,19 @@ function handlePlacementHover(event) {
         statusElement.className = 'placement-status valid';
         confirmButton.disabled = false;
     }
-    
-    // Store current placement data
+
+    // Store current placement metadata
     placementPreviewData.currentPlacement = {
         targetCol,
         targetRow,
         offsetCol,
         offsetRow,
         canPlace,
-        hasConflicts
+        hasConflicts,
+        requiresExpansion
     };
 }
+
 
 function clearPlacementPreview() {
     const cells = document.querySelectorAll('.grid-cell');
@@ -1822,21 +1848,28 @@ function clearPlacementPreview() {
 
 function handlePlacementClick(event) {
     if (!placementMode || !placementPreviewData || !placementPreviewData.currentPlacement) return;
-    
+
     const { canPlace, hasConflicts } = placementPreviewData.currentPlacement;
-    
+
     if (!canPlace) return;
-    
+
     if (hasConflicts) {
         const confirmed = confirm('This will overwrite existing nodes. Continue?');
         if (!confirmed) return;
     }
-    
-    // Enable confirm button and highlight the selection
+
+    // ✅ Mark the placement as finalized
+    placementFinalized = true;
+
+    // ✅ (Optional) Stop hover updates by detaching mousemove logic
+    mapGrid.removeEventListener('mousemove', handlePlacementHover);
+
+    // ✅ Update UI
     document.getElementById('confirmPlacement').disabled = false;
     document.getElementById('placementStatus').textContent = 'Click "Confirm Placement" to finalize';
     document.getElementById('placementStatus').className = 'placement-status valid';
 }
+
 
 function confirmPlacement() {
     if (!placementMode || !placementPreviewData || !placementPreviewData.currentPlacement) return;
@@ -1915,22 +1948,20 @@ function confirmPlacement() {
         }
     });
     
-    // Update the grid display
-    if (!needsExpansion) {
-        // Just update the affected cells
-        placementPreviewData.nodes.forEach(node => {
-            const nodeCol = node.x !== undefined ? node.x : node.column;
-            const nodeRow = node.y !== undefined ? node.y : node.row;
-            
-            const newCol = nodeCol + offsetCol;
-            const newRow = nodeRow + offsetRow;
-            
-            const cell = document.querySelector(`[data-col="${newCol}"][data-row="${newRow}"]`);
-            if (cell) {
-                updateCellDisplay(cell, newCol, newRow);
-            }
-        });
-    }
+    // Always update the affected cells after placement, regardless of expansion
+    placementPreviewData.nodes.forEach(node => {
+        const nodeCol = node.x !== undefined ? node.x : node.column;
+        const nodeRow = node.y !== undefined ? node.y : node.row;
+
+        const newCol = nodeCol + offsetCol;
+        const newRow = nodeRow + offsetRow;
+
+        const cell = document.querySelector(`[data-col="${newCol}"][data-row="${newRow}"]`);
+        if (cell) {
+            updateCellDisplay(cell, newCol, newRow);
+        }
+    });
+
     
     cancelPlacement();
     alert('Map section placed successfully!');
