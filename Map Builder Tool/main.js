@@ -35,6 +35,14 @@ let placementMode = false;
 let pendingImportData = null;
 let placementPreviewData = null;
 
+// NEW: Dynamic Tag Library System
+let projectTagLibrary = new Set(); // Dynamic library that grows with usage
+let selectedTags = new Set(); // Currently selected tags for the node being edited
+let tagSuggestionIndex = -1; // For keyboard navigation in suggestions
+
+// NEW: Entry Point Management
+let entryPointRegistry = new Map(); // entryType -> nodeKey mapping
+
 // NEW: Navigation and interaction state
 let mapViewState = {
     panX: 0,
@@ -148,6 +156,10 @@ function setupEventListeners() {
     
     // NEW: Navigation and interaction event listeners
     setupNavigationListeners();
+    
+    // NEW: Tag system and entry point listeners
+    setupTagSystemListeners();
+    setupEntryPointListeners();
 }
 
 function showSetupModal() {
@@ -3267,6 +3279,714 @@ saveNode = saveNodeWithFeatures;
 updateCellDisplay = updateCellDisplayEnhanced;
 exportMap = exportMapEnhanced;
 exportTwineFile = exportTwineFileEnhanced;
+
+// NEW: Dynamic Tag Library System
+function setupTagSystemListeners() {
+    const tagInput = document.getElementById('nodeTags');
+    const tagSuggestions = document.getElementById('tagSuggestions');
+    const selectedTagsDisplay = document.getElementById('selectedTagsDisplay');
+    
+    if (!tagInput || !tagSuggestions || !selectedTagsDisplay) return;
+    
+    // Tag input event listeners
+    tagInput.addEventListener('input', handleTagInput);
+    tagInput.addEventListener('keydown', handleTagKeydown);
+    tagInput.addEventListener('blur', hideTagSuggestions);
+    
+    // Initialize selected tags display
+    updateSelectedTagsDisplay();
+}
+
+function handleTagInput(e) {
+    const input = e.target.value;
+    const lastCommaIndex = input.lastIndexOf(',');
+    const currentTag = input.substring(lastCommaIndex + 1).trim();
+    
+    if (currentTag.length > 0) {
+        showTagSuggestions(currentTag);
+    } else {
+        hideTagSuggestions();
+    }
+}
+
+function handleTagKeydown(e) {
+    const suggestions = document.querySelectorAll('.tag-suggestion:not(.hidden)');
+    
+    switch (e.key) {
+        case 'ArrowDown':
+            e.preventDefault();
+            tagSuggestionIndex = Math.min(tagSuggestionIndex + 1, suggestions.length - 1);
+            updateTagSuggestionHighlight();
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            tagSuggestionIndex = Math.max(tagSuggestionIndex - 1, -1);
+            updateTagSuggestionHighlight();
+            break;
+        case 'Enter':
+            e.preventDefault();
+            if (tagSuggestionIndex >= 0 && suggestions[tagSuggestionIndex]) {
+                selectTagSuggestion(suggestions[tagSuggestionIndex].textContent);
+            } else {
+                // Add current input as new tag
+                const input = e.target.value;
+                const lastCommaIndex = input.lastIndexOf(',');
+                const currentTag = input.substring(lastCommaIndex + 1).trim();
+                if (currentTag) {
+                    addTag(currentTag);
+                }
+            }
+            break;
+        case 'Escape':
+            hideTagSuggestions();
+            break;
+        case ',':
+            // Auto-add tag when comma is typed
+            setTimeout(() => {
+                const input = e.target.value;
+                const tags = input.split(',').map(tag => tag.trim()).filter(tag => tag);
+                if (tags.length > selectedTags.size) {
+                    const newTag = tags[tags.length - 1];
+                    if (newTag && !selectedTags.has(newTag)) {
+                        addTag(newTag);
+                    }
+                }
+            }, 0);
+            break;
+    }
+}
+
+function showTagSuggestions(query) {
+    const tagSuggestions = document.getElementById('tagSuggestions');
+    const suggestions = getTagSuggestions(query);
+    
+    tagSuggestions.innerHTML = '';
+    tagSuggestionIndex = -1;
+    
+    if (suggestions.length === 0) {
+        tagSuggestions.classList.add('hidden');
+        return;
+    }
+    
+    suggestions.forEach(suggestion => {
+        const suggestionElement = document.createElement('div');
+        suggestionElement.className = 'tag-suggestion';
+        suggestionElement.textContent = suggestion.name;
+        
+        if (suggestion.isNew) {
+            suggestionElement.classList.add('new-tag');
+            suggestionElement.textContent += ' (new)';
+        }
+        
+        suggestionElement.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // Prevent blur event
+            selectTagSuggestion(suggestion.name);
+        });
+        
+        tagSuggestions.appendChild(suggestionElement);
+    });
+    
+    tagSuggestions.classList.remove('hidden');
+}
+
+function getTagSuggestions(query) {
+    const suggestions = [];
+    const queryLower = query.toLowerCase();
+    
+    // Get existing tags from project library
+    for (const tag of projectTagLibrary) {
+        if (tag.toLowerCase().includes(queryLower) && !selectedTags.has(tag)) {
+            suggestions.push({ name: tag, isNew: false });
+        }
+    }
+    
+    // Add "new tag" option if query doesn't exactly match any existing tag
+    if (!projectTagLibrary.has(query) && query.length > 0) {
+        suggestions.push({ name: query, isNew: true });
+    }
+    
+    return suggestions.slice(0, 10); // Limit to 10 suggestions
+}
+
+function updateTagSuggestionHighlight() {
+    const suggestions = document.querySelectorAll('.tag-suggestion');
+    suggestions.forEach((suggestion, index) => {
+        suggestion.classList.toggle('highlighted', index === tagSuggestionIndex);
+    });
+}
+
+function selectTagSuggestion(tagName) {
+    addTag(tagName);
+    hideTagSuggestions();
+    
+    // Clear the input after the last comma
+    const tagInput = document.getElementById('nodeTags');
+    const input = tagInput.value;
+    const lastCommaIndex = input.lastIndexOf(',');
+    tagInput.value = input.substring(0, lastCommaIndex + 1).trim();
+    if (tagInput.value && !tagInput.value.endsWith(',')) {
+        tagInput.value += ', ';
+    }
+    tagInput.focus();
+}
+
+function addTag(tagName) {
+    if (!tagName || selectedTags.has(tagName)) return;
+    
+    selectedTags.add(tagName);
+    projectTagLibrary.add(tagName); // Add to project library
+    updateSelectedTagsDisplay();
+    
+    // Update the input field
+    const tagInput = document.getElementById('nodeTags');
+    tagInput.value = Array.from(selectedTags).join(', ');
+    
+    if (currentEditingNode) {
+        saveNodeMemory();
+    }
+}
+
+function removeTag(tagName) {
+    selectedTags.delete(tagName);
+    updateSelectedTagsDisplay();
+    
+    // Update the input field
+    const tagInput = document.getElementById('nodeTags');
+    tagInput.value = Array.from(selectedTags).join(', ');
+    
+    if (currentEditingNode) {
+        saveNodeMemory();
+    }
+}
+
+function updateSelectedTagsDisplay() {
+    const selectedTagsDisplay = document.getElementById('selectedTagsDisplay');
+    if (!selectedTagsDisplay) return;
+    
+    selectedTagsDisplay.innerHTML = '';
+    
+    selectedTags.forEach(tagName => {
+        const tagChip = document.createElement('div');
+        tagChip.className = 'tag-chip';
+        
+        // Check if it's an entry tag
+        if (tagName.startsWith('entry-')) {
+            tagChip.classList.add('entry-tag');
+        }
+        
+        const tagText = document.createElement('span');
+        tagText.textContent = tagName;
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'tag-chip-remove';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => removeTag(tagName));
+        
+        tagChip.appendChild(tagText);
+        tagChip.appendChild(removeBtn);
+        selectedTagsDisplay.appendChild(tagChip);
+    });
+}
+
+function hideTagSuggestions() {
+    setTimeout(() => {
+        const tagSuggestions = document.getElementById('tagSuggestions');
+        if (tagSuggestions) {
+            tagSuggestions.classList.add('hidden');
+        }
+        tagSuggestionIndex = -1;
+    }, 150); // Small delay to allow click events to fire
+}
+
+function loadTagsFromNodeData(tags) {
+    selectedTags.clear();
+    if (tags && Array.isArray(tags)) {
+        tags.forEach(tag => {
+            selectedTags.add(tag);
+            projectTagLibrary.add(tag); // Add to project library
+        });
+    }
+    updateSelectedTagsDisplay();
+    
+    // Update the input field to reflect the loaded tags
+    const tagInput = document.getElementById('nodeTags');
+    if (tagInput) {
+        tagInput.value = Array.from(selectedTags).join(', ');
+    }
+}
+
+// NEW: Entry Point Management System
+function setupEntryPointListeners() {
+    const isEntryPointCheckbox = document.getElementById('isEntryPoint');
+    const entryPointOptions = document.getElementById('entryPointOptions');
+    const entryPointType = document.getElementById('entryPointType');
+    const entryPointWarning = document.getElementById('entryPointWarning');
+    
+    if (!isEntryPointCheckbox || !entryPointOptions || !entryPointType || !entryPointWarning) return;
+    
+    // Entry point checkbox listener
+    isEntryPointCheckbox.addEventListener('change', handleEntryPointToggle);
+    
+    // Entry point type change listener
+    entryPointType.addEventListener('change', handleEntryPointTypeChange);
+}
+
+function handleEntryPointToggle(e) {
+    const isChecked = e.target.checked;
+    const entryPointOptions = document.getElementById('entryPointOptions');
+    const entryPointType = document.getElementById('entryPointType');
+    
+    if (isChecked) {
+        entryPointOptions.classList.remove('hidden');
+        entryPointType.focus();
+    } else {
+        entryPointOptions.classList.add('hidden');
+        // Remove entry point tag if it exists
+        removeEntryPointFromCurrentNode();
+    }
+}
+
+function handleEntryPointTypeChange(e) {
+    const selectedType = e.target.value;
+    const entryPointWarning = document.getElementById('entryPointWarning');
+    
+    if (!selectedType) {
+        entryPointWarning.classList.add('hidden');
+        return;
+    }
+    
+    // Check for conflicts
+    const existingNodeKey = entryPointRegistry.get(selectedType);
+    if (existingNodeKey && currentEditingNode) {
+        const currentNodeKey = `${currentEditingNode.col},${currentEditingNode.row}`;
+        if (existingNodeKey !== currentNodeKey) {
+            entryPointWarning.classList.remove('hidden');
+        } else {
+            entryPointWarning.classList.add('hidden');
+        }
+    } else {
+        entryPointWarning.classList.add('hidden');
+    }
+    
+    // Add entry point tag to current node
+    if (currentEditingNode) {
+        addEntryPointToCurrentNode(selectedType);
+    }
+}
+
+function addEntryPointToCurrentNode(entryType) {
+    if (!entryType || !currentEditingNode) return;
+    
+    // Remove any existing entry tags
+    removeEntryPointFromCurrentNode();
+    
+    // Add the new entry tag
+    addTag(entryType);
+    
+    // Update registry
+    const nodeKey = `${currentEditingNode.col},${currentEditingNode.row}`;
+    
+    // Remove this entry type from any other node
+    for (const [type, existingNodeKey] of entryPointRegistry.entries()) {
+        if (type === entryType && existingNodeKey !== nodeKey) {
+            entryPointRegistry.delete(type);
+            // Remove the tag from the other node if it exists
+            const otherNodeData = mapData.nodes.get(existingNodeKey);
+            if (otherNodeData && otherNodeData.tags) {
+                otherNodeData.tags = otherNodeData.tags.filter(tag => tag !== entryType);
+            }
+        }
+    }
+    
+    entryPointRegistry.set(entryType, nodeKey);
+    updateEntryPointVisuals();
+}
+
+function removeEntryPointFromCurrentNode() {
+    if (!currentEditingNode) return;
+    
+    const nodeKey = `${currentEditingNode.col},${currentEditingNode.row}`;
+    
+    // Find and remove any entry tags
+    const entryTags = Array.from(selectedTags).filter(tag => tag.startsWith('entry-'));
+    entryTags.forEach(tag => {
+        removeTag(tag);
+        entryPointRegistry.delete(tag);
+    });
+    
+    updateEntryPointVisuals();
+}
+
+function updateEntryPointVisuals() {
+    // Update all grid cells to show/hide entry point indicators
+    document.querySelectorAll('.grid-cell').forEach(cell => {
+        cell.classList.remove('entry-point');
+        
+        const col = parseInt(cell.dataset.col);
+        const row = parseInt(cell.dataset.row);
+        const nodeKey = `${col},${row}`;
+        const nodeData = mapData.nodes.get(nodeKey);
+        
+        if (nodeData && nodeData.tags) {
+            const hasEntryTag = nodeData.tags.some(tag => tag.startsWith('entry-'));
+            if (hasEntryTag) {
+                cell.classList.add('entry-point');
+            }
+        }
+    });
+}
+
+function loadEntryPointFromNodeData(nodeData) {
+    const isEntryPointCheckbox = document.getElementById('isEntryPoint');
+    const entryPointOptions = document.getElementById('entryPointOptions');
+    const entryPointType = document.getElementById('entryPointType');
+    
+    if (!isEntryPointCheckbox || !entryPointOptions || !entryPointType) return;
+    
+    // Check if node has any entry tags
+    const entryTag = nodeData.tags?.find(tag => tag.startsWith('entry-'));
+    
+    if (entryTag) {
+        isEntryPointCheckbox.checked = true;
+        entryPointOptions.classList.remove('hidden');
+        entryPointType.value = entryTag;
+        handleEntryPointTypeChange({ target: { value: entryTag } });
+    } else {
+        isEntryPointCheckbox.checked = false;
+        entryPointOptions.classList.add('hidden');
+        entryPointType.value = '';
+    }
+}
+
+// NEW: Prompted File Naming for Exports
+function promptForFilename(defaultName, extension) {
+    const filename = window.prompt(
+        `Enter a filename for your ${extension.toUpperCase()} export:`,
+        defaultName
+    );
+    
+    if (filename === null) {
+        return null; // User cancelled
+    }
+    
+    if (filename.trim() === '') {
+        return defaultName; // Use default if empty
+    }
+    
+    // Sanitize filename
+    const sanitized = filename.trim()
+        .replace(/[<>:"/\\|?*]/g, '_') // Replace invalid characters
+        .replace(/\s+/g, '_') // Replace spaces with underscores
+        .replace(/_{2,}/g, '_') // Replace multiple underscores with single
+        .replace(/^_+|_+$/g, ''); // Remove leading/trailing underscores
+    
+    return sanitized || defaultName;
+}
+
+// Enhanced export functions with prompted naming
+function exportMapWithPrompt() {
+    if (mapData.nodes.size === 0) {
+        alert('No nodes to export. Please add some nodes first.');
+        return;
+    }
+    
+    const defaultFilename = mapData.name.toLowerCase().replace(/\s+/g, '_');
+    const filename = promptForFilename(defaultFilename, 'json');
+    
+    if (filename === null) {
+        return; // User cancelled
+    }
+    
+    // Find a default start position (first node with data)
+    let defaultStart = null;
+    for (const [key, nodeData] of mapData.nodes) {
+        const [col, row] = key.split(',').map(Number);
+        defaultStart = { x: col, y: row };
+        break;
+    }
+    
+    if (!defaultStart) {
+        alert('No valid nodes found for export.');
+        return;
+    }
+    
+    // Build export data
+    const exportData = {
+        mapId: filename,
+        name: mapData.name,
+        gridSize: {
+            width: mapData.width,
+            height: mapData.height
+        },
+        defaultStart: defaultStart,
+        nodes: [],
+        passageTexts: Object.fromEntries(passageTexts),
+        projectTagLibrary: Array.from(projectTagLibrary),
+        entryPointRegistry: Object.fromEntries(entryPointRegistry)
+    };
+    
+    // Convert nodes to export format
+    for (const [key, nodeData] of mapData.nodes) {
+        const [col, row] = key.split(',').map(Number);
+        
+        const exportNode = {
+            column: col,
+            row: row,
+            name: nodeData.name || '',
+            passage: nodeData.passage || '',
+            icon: nodeData.icon || '',
+            fogOfWar: nodeData.fogOfWar || false,
+            tags: nodeData.tags || [],
+            style: nodeData.style || {},
+            conditions: nodeData.conditions || [],
+            transitions: {}
+        };
+        
+        // Add transitions for this node
+        for (const [transitionKey, transitionData] of mapData.transitions) {
+            const [from, to] = transitionKey.split('-');
+            const [fromCol, fromRow] = from.split(',').map(Number);
+            const [toCol, toRow] = to.split(',').map(Number);
+            
+            if (fromCol === col && fromRow === row) {
+                // Determine direction
+                let direction;
+                if (toCol > fromCol) direction = 'east';
+                else if (toCol < fromCol) direction = 'west';
+                else if (toRow > fromRow) direction = 'south';
+                else if (toRow < fromRow) direction = 'north';
+                
+                if (direction) {
+                    exportNode.transitions[direction] = {
+                        type: transitionData.type,
+                        conditions: transitionData.conditions || []
+                    };
+                }
+            }
+        }
+        
+        exportData.nodes.push(exportNode);
+    }
+    
+    // Download JSON file
+    const jsonString = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    alert('Map exported successfully!');
+}
+
+function exportTwineFileWithPrompt() {
+    if (mapData.nodes.size === 0) {
+        alert('No nodes to export. Please add some nodes first.');
+        return;
+    }
+    
+    const defaultFilename = `${mapData.name.toLowerCase().replace(/\s+/g, '_')}_passages`;
+    const filename = promptForFilename(defaultFilename, 'tw');
+    
+    if (filename === null) {
+        return; // User cancelled
+    }
+    
+    let twContent = '';
+    
+    // Export passage texts
+    for (const [nodeKey, nodeData] of mapData.nodes) {
+        if (nodeData.passage) {
+            const passageData = passageTexts.get(nodeKey);
+            
+            // Main passage
+            twContent += `:: ${nodeData.passage}\n`;
+            if (passageData && passageData.main) {
+                twContent += passageData.main + '\n\n';
+            } else {
+                twContent += `<!-- Auto-generated passage for ${mapData.name} -->\n`;
+                twContent += `<!-- Add your passage content here -->\n\n`;
+            }
+            
+            // Conditional passages
+            if (nodeData.conditions && nodeData.conditions.length > 0) {
+                nodeData.conditions.forEach(condition => {
+                    const conditionPassageName = condition.passage;
+                    twContent += `:: ${conditionPassageName}\n`;
+                    
+                    if (passageData && passageData.conditions[condition.passage]) {
+                        twContent += passageData.conditions[condition.passage] + '\n\n';
+                    } else {
+                        twContent += `<!-- Conditional passage: ${condition.description || 'No description'} -->\n`;
+                        twContent += `<!-- Condition: ${condition.type} "${condition.name}" ${condition.operator} ${condition.value} -->\n`;
+                        twContent += `<!-- Add your conditional passage content here -->\n\n`;
+                    }
+                });
+            }
+        }
+    }
+    
+    // Add a special map data passage
+    twContent += `:: ${mapData.name.replace(/\s+/g, '_')}_MapData\n`;
+    twContent += `<!-- Map data for ${mapData.name} -->\n`;
+    twContent += `<!-- This passage contains the map configuration -->\n\n`;
+    
+    // Download .tw file
+    const blob = new Blob([twContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.tw`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    const passageCount = Array.from(mapData.nodes.values())
+        .filter(node => node.passage)
+        .reduce((count, node) => count + 1 + (node.conditions ? node.conditions.length : 0), 0);
+    
+    alert(`Twine file exported with ${passageCount} passages!`);
+}
+
+// Enhanced node editing to support new features
+function editNodeWithNewFeatures(col, row) {
+    saveState(`Edit node (${col},${row})`);
+    
+    currentEditingNode = { col, row };
+    currentEditingTransition = null;
+    
+    const nodeKey = `${col},${row}`;
+    
+    // IMPORTANT: Clear the selectedTags Set first to prevent tag bleeding between nodes
+    selectedTags.clear();
+    
+    // Try to load from memory first, then from saved data
+    if (!loadNodeMemory(col, row)) {
+        const nodeData = mapData.nodes.get(nodeKey) || {};
+        
+        // Basic fields
+        document.getElementById('nodeName').value = nodeData.name || '';
+        document.getElementById('passageName').value = nodeData.passage || '';
+        document.getElementById('nodeIcon').value = nodeData.icon || '';
+        document.getElementById('fogOfWar').checked = nodeData.fogOfWar || false;
+        
+        // Load tags into the new system (this will populate selectedTags)
+        loadTagsFromNodeData(nodeData.tags);
+        
+        // Load entry point data
+        loadEntryPointFromNodeData(nodeData);
+        
+        // Style
+        if (nodeData.style) {
+            document.getElementById('nodePrimaryColor').value = nodeData.style.primaryColor || '#007bff';
+            document.getElementById('nodeSecondaryColor').value = nodeData.style.secondaryColor || '#6c757d';
+            document.getElementById('nodePattern').value = nodeData.style.pattern || 'none';
+        } else {
+            document.getElementById('nodePrimaryColor').value = '#007bff';
+            document.getElementById('nodeSecondaryColor').value = '#6c757d';
+            document.getElementById('nodePattern').value = 'none';
+        }
+        
+        updateNodeConditionsList(nodeData.conditions || []);
+        
+        // Update icon selection UI
+        if (nodeData.icon) {
+            updateIconSelection(nodeData.icon);
+        } else {
+            clearIconSelection();
+        }
+    }
+    
+    // Show node editor
+    document.getElementById('nodeEditor').classList.remove('hidden');
+    document.getElementById('transitionEditor').classList.add('hidden');
+    document.getElementById('sidebarTitle').textContent = `Edit Node (${col},${row})`;
+    document.getElementById('sidebar').classList.remove('hidden');
+}
+
+// Enhanced save node with new features
+function saveNodeWithAllFeatures() {
+    if (!currentEditingNode) return;
+    
+    const { col, row } = currentEditingNode;
+    const nodeKey = `${col},${row}`;
+    
+    const name = document.getElementById('nodeName').value.trim();
+    const passage = document.getElementById('passageName').value.trim();
+    const icon = document.getElementById('nodeIcon').value;
+    const fogOfWar = document.getElementById('fogOfWar').checked;
+    
+    // Get tags from the new system
+    const tags = Array.from(selectedTags);
+    
+    // Get style
+    const style = {
+        primaryColor: document.getElementById('nodePrimaryColor').value,
+        secondaryColor: document.getElementById('nodeSecondaryColor').value,
+        pattern: document.getElementById('nodePattern').value
+    };
+    
+    const conditions = getCurrentNodeConditions();
+    
+    if (name || passage || icon || tags.length > 0) {
+        mapData.nodes.set(nodeKey, {
+            name: name,
+            passage: passage,
+            icon: icon,
+            fogOfWar: fogOfWar,
+            tags: tags,
+            style: style,
+            conditions: conditions
+        });
+        
+        // Update entry point registry
+        const entryTag = tags.find(tag => tag.startsWith('entry-'));
+        if (entryTag) {
+            entryPointRegistry.set(entryTag, nodeKey);
+        }
+    } else {
+        mapData.nodes.delete(nodeKey);
+        
+        // Remove from entry point registry
+        for (const [type, registeredNodeKey] of entryPointRegistry.entries()) {
+            if (registeredNodeKey === nodeKey) {
+                entryPointRegistry.delete(type);
+            }
+        }
+    }
+    
+    // Clear memory for this node
+    nodeMemory.delete(nodeKey);
+    
+    const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
+    updateCellDisplay(cell, col, row);
+    
+    // Apply styling
+    const nodeData = mapData.nodes.get(nodeKey);
+    if (nodeData) {
+        applyNodeStyling(cell, nodeData);
+    }
+    
+    // Update entry point visuals
+    updateEntryPointVisuals();
+    
+    closeSidebar();
+}
+
+// Replace export functions with prompted versions
+exportMap = exportMapWithPrompt;
+exportTwineFile = exportTwineFileWithPrompt;
+
+// Replace node editing functions with enhanced versions
+editNode = editNodeWithNewFeatures;
+saveNode = saveNodeWithAllFeatures;
 
 // Initialize icon selection when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {

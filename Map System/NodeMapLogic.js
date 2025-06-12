@@ -553,7 +553,7 @@ window.MapSystem = {
     },
     
     /**
-     * Generate minimap HTML
+     * Generate minimap HTML with enhanced styling support
      */
     generateMinimapHTML() {
         if (!this.currentMap) return '';
@@ -577,17 +577,41 @@ window.MapSystem = {
                 
                 let tileClass = 'tile minimap-tile';
                 let tileContent = '';
+                let tileStyle = '';
                 
                 if (!isRevealed && this.currentMap.fogOfWar) {
                     tileClass += ' tile-hidden';
                 } else if (node) {
                     tileClass += ' tile-node';
                     
+                    // Apply node styling
+                    if (node.style) {
+                        tileStyle = this.generateNodeStyle(node.style);
+                        if (node.style.pattern && node.style.pattern !== 'none') {
+                            tileClass += ` node-pattern-${node.style.pattern}`;
+                        }
+                    }
+                    
+                    // Add entry point indicator
+                    if (node.tags && node.tags.some(tag => tag.startsWith('entry-'))) {
+                        tileClass += ' entry-point';
+                    }
+                    
+                    // Add region/tag classes for styling
+                    if (node.tags) {
+                        node.tags.forEach(tag => {
+                            tileClass += ` tag-${tag.replace(/[^a-zA-Z0-9-]/g, '-')}`;
+                        });
+                    }
+                    
                     if (isPlayer) {
                         tileClass += ' player-tile';
                         tileContent = '<i data-lucide="user" class="player-indicator"></i>';
-                    } else if (node.icon) {
-                        tileContent = `<i data-lucide="${node.icon}" class="tile-icon"></i>`;
+                    } else {
+                        const effectiveNode = this.getEffectiveNodeData(node);
+                        if (effectiveNode.icon) {
+                            tileContent = `<i data-lucide="${effectiveNode.icon}" class="tile-icon"></i>`;
+                        }
                     }
                     
                     // Add transitions
@@ -605,7 +629,7 @@ window.MapSystem = {
                     tileClass += ' tile-empty';
                 }
                 
-                html += `<div class="${tileClass}" data-x="${x}" data-y="${y}">${tileContent}</div>`;
+                html += `<div class="${tileClass}" data-x="${x}" data-y="${y}" style="${tileStyle}">${tileContent}</div>`;
             }
         }
         
@@ -681,7 +705,7 @@ window.MapSystem = {
     },
     
     /**
-     * Generate full map HTML for journal
+     * Generate full map HTML for journal with enhanced styling
      */
     generateFullMapHTML() {
         if (!this.currentMap) {
@@ -701,17 +725,41 @@ window.MapSystem = {
                 
                 let tileClass = 'tile full-map-tile';
                 let tileContent = '';
+                let tileStyle = '';
                 
                 if (!isRevealed && this.currentMap.fogOfWar) {
                     tileClass += ' tile-hidden';
                 } else if (node) {
                     tileClass += ' tile-node';
                     
+                    // Apply node styling
+                    if (node.style) {
+                        tileStyle = this.generateNodeStyle(node.style);
+                        if (node.style.pattern && node.style.pattern !== 'none') {
+                            tileClass += ` node-pattern-${node.style.pattern}`;
+                        }
+                    }
+                    
+                    // Add entry point indicator
+                    if (node.tags && node.tags.some(tag => tag.startsWith('entry-'))) {
+                        tileClass += ' entry-point';
+                    }
+                    
+                    // Add region/tag classes for styling
+                    if (node.tags) {
+                        node.tags.forEach(tag => {
+                            tileClass += ` tag-${tag.replace(/[^a-zA-Z0-9-]/g, '-')}`;
+                        });
+                    }
+                    
                     if (isPlayer) {
                         tileClass += ' player-tile';
                         tileContent = '<i data-lucide="user" class="player-indicator"></i>';
-                    } else if (node.icon) {
-                        tileContent = `<i data-lucide="${node.icon}" class="tile-icon"></i>`;
+                    } else {
+                        const effectiveNode = this.getEffectiveNodeData(node);
+                        if (effectiveNode.icon) {
+                            tileContent = `<i data-lucide="${effectiveNode.icon}" class="tile-icon"></i>`;
+                        }
                     }
                     
                     // Add click handler for movement
@@ -734,7 +782,7 @@ window.MapSystem = {
                     tileClass += ' tile-empty';
                 }
                 
-                html += `<div class="${tileClass}" data-x="${x}" data-y="${y}" onclick="MapSystem.handleTileClick(${x}, ${y})">${tileContent}</div>`;
+                html += `<div class="${tileClass}" data-x="${x}" data-y="${y}" onclick="MapSystem.handleTileClick(${x}, ${y})" style="${tileStyle}">${tileContent}</div>`;
             }
         }
         
@@ -812,6 +860,183 @@ window.MapSystem = {
         if (window.lucide) {
             lucide.createIcons();
         }
+    },
+    
+    // ===== ENHANCED GAMEPLAY UTILITY FUNCTIONS =====
+    
+    /**
+     * Generate CSS style string for node styling
+     */
+    generateNodeStyle(style) {
+        let styleString = '';
+        
+        if (style.primaryColor && style.primaryColor !== '#007bff') {
+            styleString += `background-color: ${style.primaryColor}; `;
+            styleString += `--node-primary-color: ${style.primaryColor}; `;
+        }
+        
+        if (style.secondaryColor && style.secondaryColor !== '#6c757d') {
+            styleString += `--node-secondary-color: ${style.secondaryColor}; `;
+        }
+        
+        return styleString;
+    },
+    
+    /**
+     * Get all nodes with specific tags
+     */
+    getNodesByTag(tag) {
+        if (!this.currentMap) return [];
+        
+        return this.currentMap.nodes.filter(node => 
+            node.tags && node.tags.includes(tag)
+        );
+    },
+    
+    /**
+     * Get all nodes in a specific region
+     */
+    getNodesByRegion(region) {
+        return this.getNodesByTag(region);
+    },
+    
+    /**
+     * Get current node's tags
+     */
+    getCurrentNodeTags() {
+        const currentNode = this.getNodeAt(this.currentPosition.x, this.currentPosition.y);
+        return currentNode ? (currentNode.tags || []) : [];
+    },
+    
+    /**
+     * Check if current location has specific tag
+     */
+    currentLocationHasTag(tag) {
+        return this.getCurrentNodeTags().includes(tag);
+    },
+    
+    /**
+     * Get entry point position by type
+     */
+    getEntryPointPosition(entryType) {
+        if (!this.entryPointRegistry.has(entryType)) {
+            return null;
+        }
+        
+        const nodeKey = this.entryPointRegistry.get(entryType);
+        const [x, y] = nodeKey.split(',').map(Number);
+        return { x, y };
+    },
+    
+    /**
+     * Teleport player to entry point
+     */
+    teleportToEntryPoint(entryType) {
+        const position = this.getEntryPointPosition(entryType);
+        if (!position) {
+            console.warn(`[MapSystem] Entry point not found: ${entryType}`);
+            return false;
+        }
+        
+        const targetNode = this.getNodeAt(position.x, position.y);
+        if (!targetNode) {
+            console.warn(`[MapSystem] No node at entry point position: ${entryType}`);
+            return false;
+        }
+        
+        // Update position
+        this.currentPosition = position;
+        State.variables.player.mapState.position = { ...position };
+        
+        // Reveal tiles for fog of war
+        if (this.currentMap.fogOfWar) {
+            this.revealTile(this.currentMap.mapId, position.x, position.y);
+            this.revealAdjacentTiles(this.currentMap.mapId, position.x, position.y);
+        }
+        
+        // Update displays
+        this.updateMinimapDisplay();
+        this.updateLocationInfo();
+        
+        // Navigate to the target passage
+        const effectiveNode = this.getEffectiveNodeData(targetNode);
+        if (effectiveNode.passage) {
+            console.log(`[MapSystem] Teleporting to passage: ${effectiveNode.passage}`);
+            Engine.play(effectiveNode.passage);
+        }
+        
+        return true;
+    },
+    
+    /**
+     * Get passage text for current or specified node
+     */
+    getPassageText(nodeKey = null) {
+        if (!nodeKey) {
+            nodeKey = `${this.currentPosition.x},${this.currentPosition.y}`;
+        }
+        
+        return this.passageTexts.get(nodeKey) || null;
+    },
+    
+    /**
+     * Get map metadata
+     */
+    getMapMetadata() {
+        if (!this.currentMap) return null;
+        
+        return {
+            mapId: this.currentMap.mapId,
+            name: this.currentMap.name,
+            region: this.currentMap.region || null,
+            width: this.currentMap.gridSize.width,
+            height: this.currentMap.gridSize.height,
+            entryPoints: Object.fromEntries(this.entryPointRegistry),
+            tagLibrary: Array.from(this.projectTagLibrary)
+        };
+    },
+    
+    /**
+     * Check if player can access a specific region/area
+     */
+    canAccessRegion(regionTag) {
+        const currentTags = this.getCurrentNodeTags();
+        
+        // Example: "public" areas allow access to most regions
+        if (currentTags.includes('public')) {
+            return true;
+        }
+        
+        // Example: "restricted" areas might block access
+        if (currentTags.includes('restricted')) {
+            return false;
+        }
+        
+        // Default: allow access
+        return true;
+    },
+    
+    /**
+     * Get all available entry points from current location
+     */
+    getAvailableEntryPoints() {
+        const availableEntries = [];
+        
+        for (const [entryType, nodeKey] of this.entryPointRegistry) {
+            const [x, y] = nodeKey.split(',').map(Number);
+            const node = this.getNodeAt(x, y);
+            
+            if (node) {
+                availableEntries.push({
+                    type: entryType,
+                    position: { x, y },
+                    name: node.name,
+                    tags: node.tags || []
+                });
+            }
+        }
+        
+        return availableEntries;
     }
 };
 
