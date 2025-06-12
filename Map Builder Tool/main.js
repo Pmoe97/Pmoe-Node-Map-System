@@ -14,6 +14,15 @@ let isDarkTheme = false;
 // Node memory for unsaved changes
 let nodeMemory = new Map();
 
+// Undo/Redo system
+let undoStack = [];
+let redoStack = [];
+const MAX_UNDO_HISTORY = 10;
+
+// Passage text storage
+let passageTexts = new Map(); // nodeKey -> {main: string, conditions: {conditionId: string}}
+let currentEditingPassage = null;
+
 // Auto-save functionality
 let autoSaveInterval = null;
 const AUTO_SAVE_DELAY = 2000; // 2 seconds
@@ -25,6 +34,27 @@ let conditionModalContext = null; // 'node' or 'transition'
 let placementMode = false;
 let pendingImportData = null;
 let placementPreviewData = null;
+
+// NEW: Navigation and interaction state
+let mapViewState = {
+    panX: 0,
+    panY: 0,
+    zoom: 1,
+    minZoom: 0.5,
+    maxZoom: 2.0
+};
+
+let navigationState = {
+    isPanning: false,
+    lastPanX: 0,
+    lastPanY: 0,
+    isSelecting: false,
+    selectionStart: { x: 0, y: 0 },
+    selectionEnd: { x: 0, y: 0 },
+    selectedNodes: new Set()
+};
+
+let selectionBox = null;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -53,7 +83,25 @@ function setupEventListeners() {
     document.getElementById('exportBtn').addEventListener('click', exportMap);
     document.getElementById('exportTwBtn').addEventListener('click', exportTwineFile);
     document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+    document.getElementById('undoBtn').addEventListener('click', performUndo);
+    document.getElementById('redoBtn').addEventListener('click', performRedo);
+    document.getElementById("navHelpToggle").addEventListener("click", () => {
+    const panel = document.getElementById("navigationHints");
+    panel.classList.toggle("hidden");
+    });
+
+    // Passage text editor
+    document.getElementById('editPassageText').addEventListener('click', openPassageTextEditor);
+    document.getElementById('closePassageEditor').addEventListener('click', closePassageTextEditor);
+    document.getElementById('savePassageText').addEventListener('click', savePassageText);
+    document.getElementById('cancelPassageText').addEventListener('click', closePassageTextEditor);
     
+    // Style controls
+    setupStyleControls();
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', handleKeyboardShortcuts);
+
     // File input for importing
     document.getElementById('fileInput').addEventListener('change', handleFileImport);
     
@@ -97,6 +145,9 @@ function setupEventListeners() {
     
     // Placement mode event listeners
     setupPlacementListeners();
+    
+    // NEW: Navigation and interaction event listeners
+    setupNavigationListeners();
 }
 
 function showSetupModal() {
@@ -2025,11 +2076,1204 @@ function handleFileImportEnhanced(event) {
 document.getElementById('fileInput').removeEventListener('change', handleFileImport);
 document.getElementById('fileInput').addEventListener('change', handleFileImportEnhanced);
 
+// NEW: Navigation and interaction functionality
+function setupNavigationListeners() {
+    const gridContainer = document.querySelector('.grid-container');
+    const mapGrid = document.getElementById('mapGrid');
+    
+    // Middle mouse button panning
+    gridContainer.addEventListener('mousedown', handlePanStart);
+    gridContainer.addEventListener('mousemove', handlePanMove);
+    gridContainer.addEventListener('mouseup', handlePanEnd);
+    gridContainer.addEventListener('mouseleave', handlePanEnd);
+    
+    // Zoom with Ctrl + scroll wheel
+    gridContainer.addEventListener('wheel', handleZoom);
+    
+    // Arrow key navigation
+    document.addEventListener('keydown', handleKeyNavigation);
+    
+    // Right-click selection
+    mapGrid.addEventListener('contextmenu', handleRightClickStart);
+    mapGrid.addEventListener('mousedown', handleSelectionStart);
+    mapGrid.addEventListener('mousemove', handleSelectionMove);
+    mapGrid.addEventListener('mouseup', handleSelectionEnd);
+    
+    // Apply initial transform
+    updateMapTransform();
+}
+
+function handlePanStart(e) {
+    // Only handle middle mouse button (button 1)
+    if (e.button === 1) {
+        e.preventDefault();
+        navigationState.isPanning = true;
+        navigationState.lastPanX = e.clientX;
+        navigationState.lastPanY = e.clientY;
+        document.body.style.cursor = 'grabbing';
+    }
+}
+
+function handlePanMove(e) {
+    if (!navigationState.isPanning) return;
+    
+    e.preventDefault();
+    const deltaX = e.clientX - navigationState.lastPanX;
+    const deltaY = e.clientY - navigationState.lastPanY;
+    
+    mapViewState.panX += deltaX;
+    mapViewState.panY += deltaY;
+    
+    navigationState.lastPanX = e.clientX;
+    navigationState.lastPanY = e.clientY;
+    
+    updateMapTransform();
+}
+
+function handlePanEnd(e) {
+    if (navigationState.isPanning) {
+        navigationState.isPanning = false;
+        document.body.style.cursor = '';
+    }
+}
+
+function handleZoom(e) {
+    // Only zoom when Ctrl is held
+    if (!e.ctrlKey) return;
+    
+    e.preventDefault();
+    
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = mapViewState.zoom * zoomFactor;
+    
+    // Constrain zoom level
+    mapViewState.zoom = Math.max(mapViewState.minZoom, Math.min(mapViewState.maxZoom, newZoom));
+    
+    updateMapTransform();
+}
+
+function handleKeyNavigation(e) {
+    // Don't interfere with input fields
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+        return;
+    }
+    
+    // Don't interfere with modals
+    if (document.querySelector('.modal:not(.hidden)')) {
+        return;
+    }
+    
+    const moveDistance = 50; // pixels to move per keypress
+    
+    switch (e.key) {
+        case 'ArrowUp':
+            e.preventDefault();
+            mapViewState.panY += moveDistance;
+            updateMapTransform();
+            break;
+        case 'ArrowDown':
+            e.preventDefault();
+            mapViewState.panY -= moveDistance;
+            updateMapTransform();
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            mapViewState.panX += moveDistance;
+            updateMapTransform();
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            mapViewState.panX -= moveDistance;
+            updateMapTransform();
+            break;
+        case 'Escape':
+            // Clear selection
+            clearSelection();
+            break;
+    }
+}
+
+function handleRightClickStart(e) {
+    e.preventDefault(); // Prevent context menu
+}
+
+function handleSelectionStart(e) {
+    // Only handle right mouse button for selection
+    if (e.button === 2) {
+        e.preventDefault();
+        
+        const rect = e.currentTarget.getBoundingClientRect();
+        navigationState.isSelecting = true;
+        navigationState.selectionStart = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+        navigationState.selectionEnd = { ...navigationState.selectionStart };
+        
+        createSelectionBox();
+    }
+}
+
+function handleSelectionMove(e) {
+    if (!navigationState.isSelecting) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    navigationState.selectionEnd = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+    };
+    
+    updateSelectionBox();
+    updateSelectedNodes();
+}
+
+function handleSelectionEnd(e) {
+    if (navigationState.isSelecting && e.button === 2) {
+        navigationState.isSelecting = false;
+        finalizeSelection();
+    }
+}
+
+function createSelectionBox() {
+    if (selectionBox) {
+        selectionBox.remove();
+    }
+    
+    selectionBox = document.createElement('div');
+    selectionBox.className = 'selection-box';
+    selectionBox.style.position = 'absolute';
+    selectionBox.style.border = '2px dashed var(--accent-color)';
+    selectionBox.style.backgroundColor = 'rgba(0, 123, 255, 0.1)';
+    selectionBox.style.pointerEvents = 'none';
+    selectionBox.style.zIndex = '1000';
+    
+    document.getElementById('mapGrid').appendChild(selectionBox);
+}
+
+function updateSelectionBox() {
+    if (!selectionBox) return;
+    
+    const start = navigationState.selectionStart;
+    const end = navigationState.selectionEnd;
+    
+    const left = Math.min(start.x, end.x);
+    const top = Math.min(start.y, end.y);
+    const width = Math.abs(end.x - start.x);
+    const height = Math.abs(end.y - start.y);
+    
+    selectionBox.style.left = `${left}px`;
+    selectionBox.style.top = `${top}px`;
+    selectionBox.style.width = `${width}px`;
+    selectionBox.style.height = `${height}px`;
+}
+
+function updateSelectedNodes() {
+    // Clear previous selection visual
+    document.querySelectorAll('.grid-cell.selected').forEach(cell => {
+        cell.classList.remove('selected');
+    });
+    
+    navigationState.selectedNodes.clear();
+    
+    const start = navigationState.selectionStart;
+    const end = navigationState.selectionEnd;
+    
+    const selectionRect = {
+        left: Math.min(start.x, end.x),
+        top: Math.min(start.y, end.y),
+        right: Math.max(start.x, end.x),
+        bottom: Math.max(start.y, end.y)
+    };
+    
+    // Check each grid cell for intersection
+    document.querySelectorAll('.grid-cell').forEach(cell => {
+        const cellRect = cell.getBoundingClientRect();
+        const gridRect = document.getElementById('mapGrid').getBoundingClientRect();
+        
+        const cellRelativeRect = {
+            left: cellRect.left - gridRect.left,
+            top: cellRect.top - gridRect.top,
+            right: cellRect.right - gridRect.left,
+            bottom: cellRect.bottom - gridRect.top
+        };
+        
+        // Check if selection rectangle intersects with cell
+        if (selectionRect.left < cellRelativeRect.right &&
+            selectionRect.right > cellRelativeRect.left &&
+            selectionRect.top < cellRelativeRect.bottom &&
+            selectionRect.bottom > cellRelativeRect.top) {
+            
+            const col = parseInt(cell.dataset.col);
+            const row = parseInt(cell.dataset.row);
+            const nodeKey = `${col},${row}`;
+            
+            navigationState.selectedNodes.add(nodeKey);
+            cell.classList.add('selected');
+        }
+    });
+    
+    updateBulkActionsUI();
+}
+
+function finalizeSelection() {
+    if (selectionBox) {
+        selectionBox.remove();
+        selectionBox = null;
+    }
+    
+    // Show bulk actions if nodes are selected
+    if (navigationState.selectedNodes.size > 0) {
+        showBulkActionsPanel();
+    }
+}
+
+function clearSelection() {
+    navigationState.selectedNodes.clear();
+    document.querySelectorAll('.grid-cell.selected').forEach(cell => {
+        cell.classList.remove('selected');
+    });
+    hideBulkActionsPanel();
+    
+    if (selectionBox) {
+        selectionBox.remove();
+        selectionBox = null;
+    }
+}
+
+function updateMapTransform() {
+    const mapGrid = document.getElementById('mapGrid');
+    if (mapGrid) {
+        mapGrid.style.transform = `translate(${mapViewState.panX}px, ${mapViewState.panY}px) scale(${mapViewState.zoom})`;
+        mapGrid.style.transformOrigin = 'top left';
+    }
+}
+
+function showBulkActionsPanel() {
+    let panel = document.getElementById('bulkActionsPanel');
+    if (!panel) {
+        panel = createBulkActionsPanel();
+    }
+    panel.classList.remove('hidden');
+    updateBulkActionsUI();
+}
+
+function hideBulkActionsPanel() {
+    const panel = document.getElementById('bulkActionsPanel');
+    if (panel) {
+        panel.classList.add('hidden');
+    }
+}
+
+function createBulkActionsPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'bulkActionsPanel';
+    panel.className = 'bulk-actions-panel hidden';
+    
+    panel.innerHTML = `
+        <div class="bulk-actions-header">
+            <h3>Bulk Actions</h3>
+            <span id="selectedCount">0 nodes selected</span>
+            <button id="clearSelection" class="clear-selection-btn">&times;</button>
+        </div>
+        <div class="bulk-actions-content">
+            <div class="bulk-action-group">
+                <h4>Node Actions</h4>
+                <button id="bulkDeleteNodes" class="bulk-action-btn danger">Delete Selected Nodes</button>
+                <button id="bulkToggleFog" class="bulk-action-btn">Toggle Fog of War</button>
+            </div>
+            <div class="bulk-action-group">
+                <h4>Transition Actions</h4>
+                <label for="bulkTransitionType">Set transition type:</label>
+                <select id="bulkTransitionType">
+                    <option value="none">None</option>
+                    <option value="bidirectional">Bidirectional</option>
+                    <option value="one-way">One-Way</option>
+                    <option value="locked">Locked</option>
+                    <option value="secret">Secret</option>
+                </select>
+                <button id="applyBulkTransitions" class="bulk-action-btn">Apply to Selection</button>
+            </div>
+        </div>
+    `;
+    
+    // Add event listeners
+    panel.querySelector('#clearSelection').addEventListener('click', clearSelection);
+    panel.querySelector('#bulkDeleteNodes').addEventListener('click', bulkDeleteNodes);
+    panel.querySelector('#bulkToggleFog').addEventListener('click', bulkToggleFog);
+    panel.querySelector('#applyBulkTransitions').addEventListener('click', applyBulkTransitions);
+    
+    document.body.appendChild(panel);
+    return panel;
+}
+
+function updateBulkActionsUI() {
+    const countElement = document.getElementById('selectedCount');
+    if (countElement) {
+        countElement.textContent = `${navigationState.selectedNodes.size} nodes selected`;
+    }
+}
+
+function bulkDeleteNodes() {
+    if (navigationState.selectedNodes.size === 0) return;
+    
+    const confirmed = confirm(`Delete ${navigationState.selectedNodes.size} selected nodes? This action cannot be undone.`);
+    if (!confirmed) return;
+    
+    // Delete nodes and their transitions
+    navigationState.selectedNodes.forEach(nodeKey => {
+        mapData.nodes.delete(nodeKey);
+        
+        // Remove all transitions involving this node
+        const transitionsToRemove = [];
+        for (const [key, transition] of mapData.transitions) {
+            const [from, to] = key.split('-');
+            if (from === nodeKey || to === nodeKey) {
+                transitionsToRemove.push(key);
+            }
+        }
+        transitionsToRemove.forEach(key => mapData.transitions.delete(key));
+        
+        // Update cell display
+        const [col, row] = nodeKey.split(',').map(Number);
+        const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
+        if (cell) {
+            updateCellDisplay(cell, col, row);
+        }
+    });
+    
+    // Update surrounding cells to refresh transition connectors
+    navigationState.selectedNodes.forEach(nodeKey => {
+        const [col, row] = nodeKey.split(',').map(Number);
+        updateSurroundingCells(col, row);
+    });
+    
+    clearSelection();
+}
+
+function bulkToggleFog() {
+    if (navigationState.selectedNodes.size === 0) return;
+    
+    // Determine if we should enable or disable fog based on majority
+    let fogCount = 0;
+    navigationState.selectedNodes.forEach(nodeKey => {
+        const nodeData = mapData.nodes.get(nodeKey);
+        if (nodeData && nodeData.fogOfWar) {
+            fogCount++;
+        }
+    });
+    
+    const shouldEnableFog = fogCount < navigationState.selectedNodes.size / 2;
+    
+    navigationState.selectedNodes.forEach(nodeKey => {
+        const nodeData = mapData.nodes.get(nodeKey);
+        if (nodeData) {
+            nodeData.fogOfWar = shouldEnableFog;
+            
+            // Update cell display
+            const [col, row] = nodeKey.split(',').map(Number);
+            const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
+            if (cell) {
+                updateCellDisplay(cell, col, row);
+            }
+        }
+    });
+}
+
+function applyBulkTransitions() {
+    if (navigationState.selectedNodes.size === 0) return;
+    
+    const transitionType = document.getElementById('bulkTransitionType').value;
+    const selectedArray = Array.from(navigationState.selectedNodes);
+    
+    // Apply transitions within the selection area only
+    selectedArray.forEach(nodeKey => {
+        const [col, row] = nodeKey.split(',').map(Number);
+        
+        // Check each direction for connections within selection
+        const directions = [
+            { dx: 1, dy: 0, dir: 'east' },
+            { dx: 0, dy: 1, dir: 'south' },
+            { dx: -1, dy: 0, dir: 'west' },
+            { dx: 0, dy: -1, dir: 'north' }
+        ];
+        
+        directions.forEach(({ dx, dy, dir }) => {
+            const targetCol = col + dx;
+            const targetRow = row + dy;
+            const targetKey = `${targetCol},${targetRow}`;
+            
+            // Only apply if target is also in selection
+            if (navigationState.selectedNodes.has(targetKey)) {
+                const transitionKey = `${col},${row}-${targetCol},${targetRow}`;
+                
+                if (transitionType === 'none') {
+                    mapData.transitions.delete(transitionKey);
+                } else {
+                    mapData.transitions.set(transitionKey, {
+                        type: transitionType,
+                        direction: transitionType === 'one-way' ? dir : null,
+                        conditions: []
+                    });
+                }
+            }
+        });
+    });
+    
+    // Update transition connectors for all affected cells
+    selectedArray.forEach(nodeKey => {
+        const [col, row] = nodeKey.split(',').map(Number);
+        updateTransitionConnectors(col, row);
+    });
+    
+    alert(`Applied ${transitionType} transitions to ${navigationState.selectedNodes.size} selected nodes.`);
+}
+
+
+// Undo/Redo System
+function saveState(action) {
+    const state = {
+        action: action,
+        timestamp: Date.now(),
+        mapData: {
+            name: mapData.name,
+            width: mapData.width,
+            height: mapData.height,
+            nodes: new Map(mapData.nodes),
+            transitions: new Map(mapData.transitions)
+        },
+        passageTexts: new Map(passageTexts)
+    };
+    
+    undoStack.push(state);
+    
+    // Limit undo stack size
+    if (undoStack.length > MAX_UNDO_HISTORY) {
+        undoStack.shift();
+    }
+    
+    // Clear redo stack when new action is performed
+    redoStack = [];
+    
+    updateUndoRedoButtons();
+}
+
+function performUndo() {
+    if (undoStack.length === 0) return;
+    
+    // Save current state to redo stack
+    const currentState = {
+        action: 'redo_point',
+        timestamp: Date.now(),
+        mapData: {
+            name: mapData.name,
+            width: mapData.width,
+            height: mapData.height,
+            nodes: new Map(mapData.nodes),
+            transitions: new Map(mapData.transitions)
+        },
+        passageTexts: new Map(passageTexts)
+    };
+    redoStack.push(currentState);
+    
+    // Restore previous state
+    const previousState = undoStack.pop();
+    restoreState(previousState);
+    
+    updateUndoRedoButtons();
+}
+
+function performRedo() {
+    if (redoStack.length === 0) return;
+    
+    // Save current state to undo stack
+    const currentState = {
+        action: 'undo_point',
+        timestamp: Date.now(),
+        mapData: {
+            name: mapData.name,
+            width: mapData.width,
+            height: mapData.height,
+            nodes: new Map(mapData.nodes),
+            transitions: new Map(mapData.transitions)
+        },
+        passageTexts: new Map(passageTexts)
+    };
+    undoStack.push(currentState);
+    
+    // Restore next state
+    const nextState = redoStack.pop();
+    restoreState(nextState);
+    
+    updateUndoRedoButtons();
+}
+
+function restoreState(state) {
+    mapData = {
+        name: state.mapData.name,
+        width: state.mapData.width,
+        height: state.mapData.height,
+        nodes: new Map(state.mapData.nodes),
+        transitions: new Map(state.mapData.transitions)
+    };
+    
+    passageTexts = new Map(state.passageTexts);
+    
+    // Update UI
+    document.getElementById('mapTitle').textContent = `Twine Map Editor - ${mapData.name}`;
+    generateGrid();
+    closeSidebar();
+}
+
+function updateUndoRedoButtons() {
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    
+    undoBtn.disabled = undoStack.length === 0;
+    redoBtn.disabled = redoStack.length === 0;
+}
+
+// Node Styling System
+function setupStyleControls() {
+    // Color preset click handlers
+    document.querySelectorAll('.color-preset').forEach(preset => {
+        preset.addEventListener('click', function() {
+            const color = this.dataset.color;
+            const isSecondary = this.closest('.color-input-group').querySelector('#nodeSecondaryColor');
+            
+            if (isSecondary) {
+                document.getElementById('nodeSecondaryColor').value = color;
+            } else {
+                document.getElementById('nodePrimaryColor').value = color;
+            }
+            
+            // Update preset selection
+            this.parentNode.querySelectorAll('.color-preset').forEach(p => p.classList.remove('selected'));
+            this.classList.add('selected');
+            
+            if (currentEditingNode) {
+                saveNodeMemory();
+            }
+        });
+    });
+    
+    // Color input change handlers
+    document.getElementById('nodePrimaryColor').addEventListener('change', function() {
+        if (currentEditingNode) {
+            saveNodeMemory();
+        }
+    });
+    
+    document.getElementById('nodeSecondaryColor').addEventListener('change', function() {
+        if (currentEditingNode) {
+            saveNodeMemory();
+        }
+    });
+    
+    document.getElementById('nodePattern').addEventListener('change', function() {
+        if (currentEditingNode) {
+            saveNodeMemory();
+        }
+    });
+    
+    // Tags input handler
+    document.getElementById('nodeTags').addEventListener('input', function() {
+        if (currentEditingNode) {
+            saveNodeMemory();
+        }
+    });
+}
+
+function applyNodeStyling(cell, nodeData) {
+    if (!nodeData.style) return;
+    
+    const { primaryColor, secondaryColor, pattern } = nodeData.style;
+    
+    // Apply primary color
+    if (primaryColor && primaryColor !== '#007bff') {
+        cell.style.backgroundColor = primaryColor;
+        cell.style.setProperty('--node-primary-color', primaryColor);
+    }
+    
+    // Apply secondary color for patterns
+    if (secondaryColor && secondaryColor !== '#6c757d') {
+        cell.style.setProperty('--node-secondary-color', secondaryColor);
+    }
+    
+    // Apply pattern
+    if (pattern && pattern !== 'none') {
+        cell.classList.add(`node-pattern-${pattern}`);
+    }
+}
+
+// Enhanced node editing with new features
+function editNodeEnhanced(col, row) {
+    saveState(`Edit node (${col},${row})`);
+    
+    currentEditingNode = { col, row };
+    currentEditingTransition = null;
+    
+    const nodeKey = `${col},${row}`;
+    
+    // Try to load from memory first, then from saved data
+    if (!loadNodeMemory(col, row)) {
+        const nodeData = mapData.nodes.get(nodeKey) || {};
+        
+        // Basic fields
+        document.getElementById('nodeName').value = nodeData.name || '';
+        document.getElementById('passageName').value = nodeData.passage || '';
+        document.getElementById('nodeIcon').value = nodeData.icon || '';
+        document.getElementById('fogOfWar').checked = nodeData.fogOfWar || false;
+        
+        // Tags
+        document.getElementById('nodeTags').value = (nodeData.tags || []).join(', ');
+        
+        // Style
+        if (nodeData.style) {
+            document.getElementById('nodePrimaryColor').value = nodeData.style.primaryColor || '#007bff';
+            document.getElementById('nodeSecondaryColor').value = nodeData.style.secondaryColor || '#6c757d';
+            document.getElementById('nodePattern').value = nodeData.style.pattern || 'none';
+        } else {
+            document.getElementById('nodePrimaryColor').value = '#007bff';
+            document.getElementById('nodeSecondaryColor').value = '#6c757d';
+            document.getElementById('nodePattern').value = 'none';
+        }
+        
+        updateNodeConditionsList(nodeData.conditions || []);
+        
+        // Update icon selection UI
+        if (nodeData.icon) {
+            updateIconSelection(nodeData.icon);
+        } else {
+            clearIconSelection();
+        }
+    }
+    
+    // Show node editor
+    document.getElementById('nodeEditor').classList.remove('hidden');
+    document.getElementById('transitionEditor').classList.add('hidden');
+    document.getElementById('sidebarTitle').textContent = `Edit Node (${col},${row})`;
+    document.getElementById('sidebar').classList.remove('hidden');
+}
+
+// Enhanced save node with new features
+function saveNodeWithFeatures() {
+    if (!currentEditingNode) return;
+    
+    const { col, row } = currentEditingNode;
+    const nodeKey = `${col},${row}`;
+    
+    const name = document.getElementById('nodeName').value.trim();
+    const passage = document.getElementById('passageName').value.trim();
+    const icon = document.getElementById('nodeIcon').value;
+    const fogOfWar = document.getElementById('fogOfWar').checked;
+    
+    // Parse tags
+    const tagsInput = document.getElementById('nodeTags').value.trim();
+    const tags = tagsInput ? tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
+    
+    // Get style
+    const style = {
+        primaryColor: document.getElementById('nodePrimaryColor').value,
+        secondaryColor: document.getElementById('nodeSecondaryColor').value,
+        pattern: document.getElementById('nodePattern').value
+    };
+    
+    const conditions = getCurrentNodeConditions();
+    
+    if (name || passage || icon || tags.length > 0) {
+        mapData.nodes.set(nodeKey, {
+            name: name,
+            passage: passage,
+            icon: icon,
+            fogOfWar: fogOfWar,
+            tags: tags,
+            style: style,
+            conditions: conditions
+        });
+    } else {
+        mapData.nodes.delete(nodeKey);
+    }
+    
+    // Clear memory for this node
+    nodeMemory.delete(nodeKey);
+    
+    const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
+    updateCellDisplay(cell, col, row);
+    
+    // Apply styling
+    const nodeData = mapData.nodes.get(nodeKey);
+    if (nodeData) {
+        applyNodeStyling(cell, nodeData);
+    }
+    
+    closeSidebar();
+}
+
+// Enhanced updateCellDisplay with styling
+function updateCellDisplayEnhanced(cell, col, row) {
+    const nodeKey = `${col},${row}`;
+    const nodeData = mapData.nodes.get(nodeKey);
+    
+    cell.innerHTML = '';
+    
+    // Remove all pattern classes
+    cell.classList.remove('node-pattern-diagonal-stripes', 'node-pattern-vertical-stripes', 
+                         'node-pattern-horizontal-stripes', 'node-pattern-dots', 
+                         'node-pattern-grid', 'node-pattern-checkerboard');
+    
+    // Reset inline styles
+    cell.style.backgroundColor = '';
+    cell.style.removeProperty('--node-primary-color');
+    cell.style.removeProperty('--node-secondary-color');
+    
+    // Recreate transition connectors
+    createTransitionConnectors(cell, col, row);
+    
+    if (nodeData) {
+        cell.classList.add('filled');
+        if (nodeData.fogOfWar) {
+            cell.classList.add('fog-of-war');
+        } else {
+            cell.classList.remove('fog-of-war');
+        }
+        
+        // Apply styling
+        applyNodeStyling(cell, nodeData);
+        
+        const content = document.createElement('div');
+        content.className = 'node-content';
+        
+        // Icon
+        if (nodeData.icon) {
+            const iconElement = document.createElement('i');
+            iconElement.setAttribute('data-lucide', nodeData.icon);
+            iconElement.className = 'node-icon';
+            content.appendChild(iconElement);
+        }
+        
+        // Name
+        if (nodeData.name) {
+            const nameElement = document.createElement('div');
+            nameElement.className = 'node-name';
+            nameElement.textContent = nodeData.name;
+            content.appendChild(nameElement);
+        }
+        
+        // Tags (show first few)
+        if (nodeData.tags && nodeData.tags.length > 0) {
+            const tagsElement = document.createElement('div');
+            tagsElement.className = 'node-tags';
+            tagsElement.textContent = nodeData.tags.slice(0, 2).join(', ');
+            if (nodeData.tags.length > 2) {
+                tagsElement.textContent += '...';
+            }
+            content.appendChild(tagsElement);
+        }
+        
+        // Coordinates
+        const coordsElement = document.createElement('div');
+        coordsElement.className = 'node-coords';
+        coordsElement.textContent = `(${col},${row})`;
+        content.appendChild(coordsElement);
+        
+        cell.appendChild(content);
+        
+        // Re-render Lucide icons
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    } else {
+        cell.classList.remove('filled', 'fog-of-war');
+        
+        const emptyText = document.createElement('div');
+        emptyText.className = 'empty-node-text';
+        emptyText.textContent = 'Empty Node';
+        cell.appendChild(emptyText);
+        
+        const coordsElement = document.createElement('div');
+        coordsElement.className = 'node-coords';
+        coordsElement.textContent = `(${col},${row})`;
+        cell.appendChild(coordsElement);
+    }
+    
+    // Update transition connectors
+    updateTransitionConnectors(col, row);
+}
+
+// Passage Text Editor
+function openPassageTextEditor() {
+    if (!currentEditingNode) return;
+    
+    const { col, row } = currentEditingNode;
+    const nodeKey = `${col},${row}`;
+    const nodeData = mapData.nodes.get(nodeKey) || {};
+    
+    currentEditingPassage = nodeKey;
+    
+    // Set title
+    document.getElementById('passageEditorTitle').textContent = 
+        `Edit Passage Text - ${nodeData.name || nodeData.passage || `Node (${col},${row})`}`;
+    
+    // Load existing passage text
+    const passageData = passageTexts.get(nodeKey) || { main: '', conditions: {} };
+    document.getElementById('mainPassageText').value = passageData.main || '';
+    
+    // Setup tabs and populate conditional passages
+    setupPassageTabs();
+    populateConditionalPassages(nodeData, passageData);
+    
+    // Show modal
+    document.getElementById('passageTextModal').classList.remove('hidden');
+    
+    // Update preview
+    updatePassagePreview();
+}
+
+function closePassageTextEditor() {
+    document.getElementById('passageTextModal').classList.add('hidden');
+    currentEditingPassage = null;
+}
+
+function savePassageText() {
+    if (!currentEditingPassage) return;
+    
+    const mainText = document.getElementById('mainPassageText').value;
+    
+    // Collect conditional passage texts
+    const conditionalTexts = {};
+    const conditionalTextareas = document.querySelectorAll('[id^="conditionalText_"]');
+    
+    conditionalTextareas.forEach(textarea => {
+        const index = textarea.id.split('_')[1];
+        const conditionEditor = textarea.closest('.conditional-passage-editor');
+        const passageName = conditionEditor.querySelector('h4').textContent.replace('Conditional Passage: ', '');
+        conditionalTexts[passageName] = textarea.value;
+    });
+    
+    // Save to passage texts
+    passageTexts.set(currentEditingPassage, {
+        main: mainText,
+        conditions: conditionalTexts
+    });
+    
+    closePassageTextEditor();
+    alert('Passage text saved successfully!');
+}
+
+function setupPassageTabs() {
+    const tabs = document.querySelectorAll('.passage-tab');
+    const panels = document.querySelectorAll('.tab-panel');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Remove active from all tabs and panels
+            tabs.forEach(t => t.classList.remove('active'));
+            panels.forEach(p => p.classList.remove('active'));
+            
+            // Add active to clicked tab and corresponding panel
+            tab.classList.add('active');
+            const targetPanel = document.getElementById(`${tab.dataset.tab}PassageTab`);
+            if (targetPanel) {
+                targetPanel.classList.add('active');
+            }
+        });
+    });
+    
+    // Setup real-time preview
+    document.getElementById('mainPassageText').addEventListener('input', updatePassagePreview);
+}
+
+function updatePassagePreview() {
+    const text = document.getElementById('mainPassageText').value;
+    const preview = document.getElementById('mainPassagePreview');
+    
+    // Simple markdown-like rendering
+    let html = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+        .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+        .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+        .replace(/^- (.*$)/gm, '<li>$1</li>')
+        .replace(/\[\[(.*?)\]\]/g, '<span style="color: var(--accent-color); font-weight: bold;">→ $1</span>')
+        .replace(/<<(.*?)>>/g, '<span style="color: var(--warning-color); font-style: italic;">&lt;&lt;$1&gt;&gt;</span>')
+        .replace(/\n/g, '<br>');
+    
+    // Wrap list items
+    html = html.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
+    
+    preview.innerHTML = html || '<em>Preview will appear here as you type...</em>';
+}
+
+function populateConditionalPassages(nodeData, passageData) {
+    const conditionalPassagesList = document.getElementById('conditionalPassagesList');
+    
+    // Clear existing content
+    conditionalPassagesList.innerHTML = '';
+    
+    // Check if node has conditions
+    if (!nodeData.conditions || nodeData.conditions.length === 0) {
+        conditionalPassagesList.innerHTML = `
+            <div class="help-text">
+                No conditional passages available. Add node conditions in the sidebar to create conditional passages.
+            </div>
+        `;
+        return;
+    }
+    
+    // Create editors for each conditional passage
+    nodeData.conditions.forEach((condition, index) => {
+        const conditionPassageName = condition.passage;
+        const conditionText = passageData.conditions[conditionPassageName] || '';
+        
+        const conditionEditor = document.createElement('div');
+        conditionEditor.className = 'conditional-passage-editor';
+        conditionEditor.innerHTML = `
+            <div class="condition-header">
+                <h4>Conditional Passage: ${conditionPassageName}</h4>
+                <div class="condition-description">
+                    <strong>Condition:</strong> ${condition.type} "${condition.name}" ${condition.operator} ${condition.value}
+                    ${condition.description ? `<br><em>${condition.description}</em>` : ''}
+                </div>
+            </div>
+            <div class="condition-editor-content">
+                <div class="form-group">
+                    <label for="conditionalText_${index}">Passage Content:</label>
+                    <textarea id="conditionalText_${index}" rows="8" placeholder="Enter content for this conditional passage...
+
+This passage will be used when: ${condition.type} '${condition.name}' ${condition.operator} ${condition.value}
+
+You can use Twine syntax like:
+[[Link to another passage]]
+<<set $variable = value>>
+<<if $condition>>...<<endif>>">${conditionText}</textarea>
+                </div>
+                <div class="condition-preview">
+                    <label>Preview:</label>
+                    <div id="conditionalPreview_${index}" class="preview-content"></div>
+                </div>
+            </div>
+        `;
+        
+        conditionalPassagesList.appendChild(conditionEditor);
+        
+        // Add real-time preview for this conditional passage
+        const textarea = conditionEditor.querySelector(`#conditionalText_${index}`);
+        const preview = conditionEditor.querySelector(`#conditionalPreview_${index}`);
+        
+        function updateConditionalPreview() {
+            const text = textarea.value;
+            let html = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+                .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                .replace(/^- (.*$)/gm, '<li>$1</li>')
+                .replace(/\[\[(.*?)\]\]/g, '<span style="color: var(--accent-color); font-weight: bold;">→ $1</span>')
+                .replace(/<<(.*?)>>/g, '<span style="color: var(--warning-color); font-style: italic;">&lt;&lt;$1&gt;&gt;</span>')
+                .replace(/\n/g, '<br>');
+            
+            html = html.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
+            preview.innerHTML = html || '<em>Preview will appear here as you type...</em>';
+        }
+        
+        textarea.addEventListener('input', updateConditionalPreview);
+        updateConditionalPreview(); // Initial preview
+    });
+}
+
+// Keyboard shortcuts
+function handleKeyboardShortcuts(e) {
+    if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+            case 'z':
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    performRedo();
+                } else {
+                    e.preventDefault();
+                    performUndo();
+                }
+                break;
+            case 'y':
+                e.preventDefault();
+                performRedo();
+                break;
+        }
+    }
+}
+
+// Enhanced export with new features
+function exportMapEnhanced() {
+    if (mapData.nodes.size === 0) {
+        alert('No nodes to export. Please add some nodes first.');
+        return;
+    }
+    
+    // Find a default start position (first node with data)
+    let defaultStart = null;
+    for (const [key, nodeData] of mapData.nodes) {
+        const [col, row] = key.split(',').map(Number);
+        defaultStart = { x: col, y: row };
+        break;
+    }
+    
+    if (!defaultStart) {
+        alert('No valid nodes found for export.');
+        return;
+    }
+    
+    // Build export data
+    const exportData = {
+        mapId: mapData.name.toLowerCase().replace(/\s+/g, '_'),
+        name: mapData.name,
+        gridSize: {
+            width: mapData.width,
+            height: mapData.height
+        },
+        defaultStart: defaultStart,
+        nodes: [],
+        passageTexts: Object.fromEntries(passageTexts)
+    };
+    
+    // Convert nodes to export format
+    for (const [key, nodeData] of mapData.nodes) {
+        const [col, row] = key.split(',').map(Number);
+        
+        const exportNode = {
+            column: col,
+            row: row,
+            name: nodeData.name || '',
+            passage: nodeData.passage || '',
+            icon: nodeData.icon || '',
+            fogOfWar: nodeData.fogOfWar || false,
+            tags: nodeData.tags || [],
+            style: nodeData.style || {},
+            conditions: nodeData.conditions || [],
+            transitions: {}
+        };
+        
+        // Add transitions for this node
+        for (const [transitionKey, transitionData] of mapData.transitions) {
+            const [from, to] = transitionKey.split('-');
+            const [fromCol, fromRow] = from.split(',').map(Number);
+            const [toCol, toRow] = to.split(',').map(Number);
+            
+            if (fromCol === col && fromRow === row) {
+                // Determine direction
+                let direction;
+                if (toCol > fromCol) direction = 'east';
+                else if (toCol < fromCol) direction = 'west';
+                else if (toRow > fromRow) direction = 'south';
+                else if (toRow < fromRow) direction = 'north';
+                
+                if (direction) {
+                    exportNode.transitions[direction] = {
+                        type: transitionData.type,
+                        conditions: transitionData.conditions || []
+                    };
+                }
+            }
+        }
+        
+        exportData.nodes.push(exportNode);
+    }
+    
+    // Download JSON file
+    const jsonString = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${exportData.mapId}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    alert('Map exported successfully!');
+}
+
+// Enhanced Twine export with passage texts
+function exportTwineFileEnhanced() {
+    if (mapData.nodes.size === 0) {
+        alert('No nodes to export. Please add some nodes first.');
+        return;
+    }
+    
+    let twContent = '';
+    
+    // Export passage texts
+    for (const [nodeKey, nodeData] of mapData.nodes) {
+        if (nodeData.passage) {
+            const passageData = passageTexts.get(nodeKey);
+            
+            // Main passage
+            twContent += `:: ${nodeData.passage}\n`;
+            if (passageData && passageData.main) {
+                twContent += passageData.main + '\n\n';
+            } else {
+                twContent += `<!-- Auto-generated passage for ${mapData.name} -->\n`;
+                twContent += `<!-- Add your passage content here -->\n\n`;
+            }
+            
+            // Conditional passages
+            if (nodeData.conditions && nodeData.conditions.length > 0) {
+                nodeData.conditions.forEach(condition => {
+                    const conditionPassageName = condition.passage;
+                    twContent += `:: ${conditionPassageName}\n`;
+                    
+                    if (passageData && passageData.conditions[condition.passage]) {
+                        twContent += passageData.conditions[condition.passage] + '\n\n';
+                    } else {
+                        twContent += `<!-- Conditional passage: ${condition.description || 'No description'} -->\n`;
+                        twContent += `<!-- Condition: ${condition.type} "${condition.name}" ${condition.operator} ${condition.value} -->\n`;
+                        twContent += `<!-- Add your conditional passage content here -->\n\n`;
+                    }
+                });
+            }
+        }
+    }
+    
+    // Add a special map data passage
+    twContent += `:: ${mapData.name.replace(/\s+/g, '_')}_MapData\n`;
+    twContent += `<!-- Map data for ${mapData.name} -->\n`;
+    twContent += `<!-- This passage contains the map configuration -->\n\n`;
+    
+    // Download .tw file
+    const blob = new Blob([twContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${mapData.name.toLowerCase().replace(/\s+/g, '_')}_passages.tw`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    const passageCount = Array.from(mapData.nodes.values())
+        .filter(node => node.passage)
+        .reduce((count, node) => count + 1 + (node.conditions ? node.conditions.length : 0), 0);
+    
+    alert(`Twine file exported with ${passageCount} passages!`);
+}
+
+// Replace original functions with enhanced versions
+editNode = editNodeEnhanced;
+saveNode = saveNodeWithFeatures;
+updateCellDisplay = updateCellDisplayEnhanced;
+exportMap = exportMapEnhanced;
+exportTwineFile = exportTwineFileEnhanced;
+
 // Initialize icon selection when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     // Wait a bit for Lucide to load
     setTimeout(() => {
         initializeIconSelection();
         initializeConditionIconSelection();
+        updateUndoRedoButtons();
     }, 100);
 });
