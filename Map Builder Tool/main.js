@@ -714,14 +714,15 @@ function exportMap() {
             transitions: {}
         };
         
-        // Add transitions for this node
+        // Add transitions for this node (both outgoing and incoming)
         for (const [transitionKey, transitionData] of mapData.transitions) {
             const [from, to] = transitionKey.split('-');
             const [fromCol, fromRow] = from.split(',').map(Number);
             const [toCol, toRow] = to.split(',').map(Number);
             
+            // Handle outgoing transitions (this node is the source)
             if (fromCol === col && fromRow === row) {
-                // Determine direction
+                // Determine direction from this node to target
                 let direction;
                 if (toCol > fromCol) direction = 'east';
                 else if (toCol < fromCol) direction = 'west';
@@ -733,6 +734,55 @@ function exportMap() {
                         type: transitionData.type,
                         conditions: transitionData.conditions || []
                     };
+                }
+            }
+            
+            // Handle incoming transitions (this node is the target)
+            // Only add if the transition is bidirectional or if it's a one-way pointing to this node
+            if (toCol === col && toRow === row && fromCol !== col && fromRow !== row) {
+                // Determine direction from target back to source
+                let direction;
+                if (fromCol > toCol) direction = 'east';
+                else if (fromCol < toCol) direction = 'west';
+                else if (fromRow > toRow) direction = 'south';
+                else if (fromRow < toRow) direction = 'north';
+                
+                if (direction) {
+                    // For bidirectional transitions, add the reverse direction
+                    if (transitionData.type === 'bidirectional') {
+                        exportNode.transitions[direction] = {
+                            type: 'bidirectional',
+                            conditions: transitionData.conditions || []
+                        };
+                    }
+                    // For one-way transitions, add with proper directional restriction info
+                    else if (transitionData.type === 'one-way') {
+                        // Determine the original allowed direction from the transition data
+                        let originalDirection = transitionData.direction;
+                        
+                        // If no specific direction was stored, infer it from the transition key
+                        if (!originalDirection) {
+                            if (toCol > fromCol) originalDirection = 'east';
+                            else if (toCol < fromCol) originalDirection = 'west';
+                            else if (toRow > fromRow) originalDirection = 'south';
+                            else if (toRow < fromRow) originalDirection = 'north';
+                        }
+                        
+                        // Add transition info showing this direction is blocked (reverse of allowed direction)
+                        exportNode.transitions[direction] = {
+                            type: 'one-way-blocked',
+                            allowedDirection: originalDirection,
+                            blockedDirection: direction,
+                            conditions: transitionData.conditions || []
+                        };
+                    }
+                    // For other transition types (locked, secret), also include them
+                    else if (transitionData.type === 'locked' || transitionData.type === 'secret') {
+                        exportNode.transitions[direction] = {
+                            type: transitionData.type,
+                            conditions: transitionData.conditions || []
+                        };
+                    }
                 }
             }
         }
