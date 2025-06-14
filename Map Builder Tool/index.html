@@ -189,6 +189,57 @@
                             </div>
                         </div>
                         <div class="form-group">
+                            <label>Transitions:</label>
+                            <div class="transition-row">
+                                <span>North:</span>
+                                <select id="transition-north">
+                                    <option value="none">None</option>
+                                    <option value="one-way-forward">One-Way North</option>
+                                    <option value="one-way-back">One-Way South</option>
+                                    <option value="bidirectional">Bidirectional</option>
+                                    <option value="locked">Locked</option>
+                                    <option value="secret">Secret</option>
+                                </select>
+                                <button type="button" class="edit-direction-conditions" data-direction="north">Edit Conditions</button>
+                            </div>
+                            <div class="transition-row">
+                                <span>West:</span>
+                                <select id="transition-west">
+                                    <option value="none">None</option>
+                                    <option value="one-way-forward">One-Way West</option>
+                                    <option value="one-way-back">One-Way East</option>
+                                    <option value="bidirectional">Bidirectional</option>
+                                    <option value="locked">Locked</option>
+                                    <option value="secret">Secret</option>
+                                </select>
+                                <button type="button" class="edit-direction-conditions" data-direction="west">Edit Conditions</button>
+                            </div>
+                            <div class="transition-row">
+                                <span>East:</span>
+                                <select id="transition-east">
+                                    <option value="none">None</option>
+                                    <option value="one-way-forward">One-Way East</option>
+                                    <option value="one-way-back">One-Way West</option>
+                                    <option value="bidirectional">Bidirectional</option>
+                                    <option value="locked">Locked</option>
+                                    <option value="secret">Secret</option>
+                                </select>
+                                <button type="button" class="edit-direction-conditions" data-direction="east">Edit Conditions</button>
+                            </div>
+                            <div class="transition-row">
+                                <span>South:</span>
+                                <select id="transition-south">
+                                    <option value="none">None</option>
+                                    <option value="one-way-forward">One-Way South</option>
+                                    <option value="one-way-back">One-Way North</option>
+                                    <option value="bidirectional">Bidirectional</option>
+                                    <option value="locked">Locked</option>
+                                    <option value="secret">Secret</option>
+                                </select>
+                                <button type="button" class="edit-direction-conditions" data-direction="south">Edit Conditions</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
                             <label>Node Conditions:</label>
                             <div id="nodeConditionsList"></div>
                             <button type="button" id="addNodeCondition">Add Node Condition</button>
