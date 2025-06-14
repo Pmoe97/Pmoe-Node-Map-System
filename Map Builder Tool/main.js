@@ -119,9 +119,17 @@ function setupEventListeners() {
     document.getElementById('clearNode').addEventListener('click', clearNode);
     document.getElementById('saveTransition').addEventListener('click', saveTransition);
     document.getElementById('removeTransition').addEventListener('click', removeTransition);
-    
+
     // Transition type change
     document.getElementById('transitionType').addEventListener('change', handleTransitionTypeChange);
+
+    // Directional transition controls
+    ['north','west','east','south'].forEach(dir => {
+        document.getElementById(`transition-${dir}`).addEventListener('change', () => handleTransitionSelect(dir));
+    });
+    document.querySelectorAll('.edit-direction-conditions').forEach(btn => {
+        btn.addEventListener('click', () => openDirectionConditions(btn.dataset.direction));
+    });
     
     // Transition condition management
     document.getElementById('addCondition').addEventListener('click', () => showConditionModal('transition'));
@@ -241,10 +249,6 @@ function createTransitionConnectors(cell, col, row) {
     if (col < mapData.width - 1) {
         const rightConnector = document.createElement('div');
         rightConnector.className = 'transition-connector horizontal right';
-        rightConnector.addEventListener('click', (e) => {
-            e.stopPropagation();
-            editTransition(col, row, col + 1, row, 'east');
-        });
         cell.appendChild(rightConnector);
     }
     
@@ -252,10 +256,6 @@ function createTransitionConnectors(cell, col, row) {
     if (row < mapData.height - 1) {
         const bottomConnector = document.createElement('div');
         bottomConnector.className = 'transition-connector vertical bottom';
-        bottomConnector.addEventListener('click', (e) => {
-            e.stopPropagation();
-            editTransition(col, row, col, row + 1, 'south');
-        });
         cell.appendChild(bottomConnector);
     }
 }
@@ -430,6 +430,113 @@ function handleTransitionTypeChange() {
     }
 }
 
+const directionOffsets = {
+    north: [0, -1],
+    south: [0, 1],
+    east: [1, 0],
+    west: [-1, 0]
+};
+
+function getOppositeDirection(dir) {
+    switch (dir) {
+        case 'north': return 'south';
+        case 'south': return 'north';
+        case 'east': return 'west';
+        case 'west': return 'east';
+    }
+}
+
+function handleTransitionSelect(dir) {
+    if (!currentEditingNode) return;
+
+    const value = document.getElementById(`transition-${dir}`).value;
+    const { col, row } = currentEditingNode;
+    const [dx, dy] = directionOffsets[dir];
+    const tCol = col + dx;
+    const tRow = row + dy;
+    if (tCol < 0 || tCol >= mapData.width || tRow < 0 || tRow >= mapData.height) return;
+
+    const key = `${col},${row}-${tCol},${tRow}`;
+    const revKey = `${tCol},${tRow}-${col},${row}`;
+    const existing = mapData.transitions.get(key) || mapData.transitions.get(revKey) || {};
+    const conditions = existing.conditions || [];
+
+    mapData.transitions.delete(key);
+    mapData.transitions.delete(revKey);
+
+    if (value === 'none') {
+        // nothing
+    } else if (value === 'bidirectional' || value === 'locked' || value === 'secret') {
+        mapData.transitions.set(key, { type: value, direction: null, conditions });
+    } else if (value === 'one-way-forward') {
+        mapData.transitions.set(key, { type: 'one-way', direction: dir, conditions });
+    } else if (value === 'one-way-back') {
+        const opp = getOppositeDirection(dir);
+        mapData.transitions.set(revKey, { type: 'one-way', direction: opp, conditions });
+    }
+
+    updateTransitionConnectors(col, row);
+    updateTransitionConnectors(tCol, tRow);
+}
+
+function populateTransitionControls(col, row) {
+    ['north','west','east','south'].forEach(dir => {
+        const select = document.getElementById(`transition-${dir}`);
+        const [dx, dy] = directionOffsets[dir];
+        const tCol = col + dx;
+        const tRow = row + dy;
+        const key = `${col},${row}-${tCol},${tRow}`;
+        const revKey = `${tCol},${tRow}-${col},${row}`;
+        let value = 'none';
+        let data = mapData.transitions.get(key);
+        if (data) {
+            if (data.type === 'one-way') value = 'one-way-forward';
+            else value = data.type;
+        } else {
+            data = mapData.transitions.get(revKey);
+            if (data) {
+                if (data.type === 'one-way') value = 'one-way-back';
+                else value = data.type;
+            }
+        }
+        select.value = value;
+    });
+}
+
+function openDirectionConditions(dir) {
+    if (!currentEditingNode) return;
+    const { col, row } = currentEditingNode;
+    const [dx, dy] = directionOffsets[dir];
+    const tCol = col + dx;
+    const tRow = row + dy;
+    const key = `${col},${row}-${tCol},${tRow}`;
+    const revKey = `${tCol},${tRow}-${col},${row}`;
+    let transition = mapData.transitions.get(key);
+    if (transition) {
+        currentEditingTransition = { fromCol: col, fromRow: row, toCol: tCol, toRow: tRow, direction: dir };
+    } else {
+        transition = mapData.transitions.get(revKey);
+        if (transition) {
+            currentEditingTransition = { fromCol: tCol, fromRow: tRow, toCol: col, toRow: row, direction: transition.direction };
+        } else {
+            transition = { type: 'none', direction: dir, conditions: [] };
+            currentEditingTransition = { fromCol: col, fromRow: row, toCol: tCol, toRow: tRow, direction: dir };
+        }
+    }
+
+    document.getElementById('transitionType').value = transition.type;
+    document.getElementById('transitionDirection').value = transition.direction || dir;
+    handleTransitionTypeChange();
+    updateConditionsList(transition.conditions);
+
+    // disable type editing
+    document.getElementById('transitionType').disabled = true;
+    document.getElementById('nodeEditor').classList.add('hidden');
+    document.getElementById('transitionEditor').classList.remove('hidden');
+    document.getElementById('sidebarTitle').textContent = `Edit Conditions (${dir})`;
+    document.getElementById('sidebar').classList.remove('hidden');
+}
+
 function saveNode() {
     if (!currentEditingNode) return;
     
@@ -510,7 +617,9 @@ function saveTransition() {
     
     updateTransitionConnectors(fromCol, fromRow);
     updateTransitionConnectors(toCol, toRow);
-    
+
+    populateTransitionControls(currentEditingNode ? currentEditingNode.col : fromCol, currentEditingNode ? currentEditingNode.row : fromRow);
+
     closeSidebar();
 }
 
@@ -651,6 +760,9 @@ function closeSidebar() {
     document.getElementById('sidebar').classList.add('hidden');
     currentEditingNode = null;
     currentEditingTransition = null;
+    document.getElementById('transitionType').disabled = false;
+    document.getElementById('nodeEditor').classList.remove('hidden');
+    document.getElementById('transitionEditor').classList.add('hidden');
 }
 
 function toggleTheme() {
@@ -884,7 +996,8 @@ function loadImportedMap(importedData) {
             passage: node.passage || '',
             icon: node.icon || '',
             fogOfWar: node.fogOfWar || false,
-            conditions: node.conditions || []
+            conditions: node.conditions || [],
+            transitions: node.transitions || {}
         });
         
         // Load transitions
@@ -928,7 +1041,8 @@ function loadImportedMap(importedData) {
 
 // Node memory functionality
 function setupNodeMemoryListeners() {
-    const nodeInputs = ['nodeName', 'passageName', 'nodeIcon', 'fogOfWar'];
+    const nodeInputs = ['nodeName', 'passageName', 'nodeIcon', 'fogOfWar',
+        'transition-north','transition-west','transition-east','transition-south'];
     
     nodeInputs.forEach(inputId => {
         const element = document.getElementById(inputId);
@@ -948,7 +1062,13 @@ function saveNodeMemory() {
         passage: document.getElementById('passageName').value,
         icon: document.getElementById('nodeIcon').value,
         fogOfWar: document.getElementById('fogOfWar').checked,
-        conditions: getCurrentNodeConditions()
+        conditions: getCurrentNodeConditions(),
+        transitions: {
+            north: document.getElementById('transition-north').value,
+            west: document.getElementById('transition-west').value,
+            east: document.getElementById('transition-east').value,
+            south: document.getElementById('transition-south').value
+        }
     };
     
     nodeMemory.set(nodeKey, memory);
@@ -957,16 +1077,24 @@ function saveNodeMemory() {
 function loadNodeMemory(col, row) {
     const nodeKey = `${col},${row}`;
     const memory = nodeMemory.get(nodeKey);
-    
+
     if (memory) {
         document.getElementById('nodeName').value = memory.name || '';
         document.getElementById('passageName').value = memory.passage || '';
         document.getElementById('nodeIcon').value = memory.icon || '';
         document.getElementById('fogOfWar').checked = memory.fogOfWar || false;
         updateNodeConditionsList(memory.conditions || []);
-        return true;
+
+        if (memory.transitions) {
+            document.getElementById('transition-north').value = memory.transitions.north || 'none';
+            document.getElementById('transition-west').value = memory.transitions.west || 'none';
+            document.getElementById('transition-east').value = memory.transitions.east || 'none';
+            document.getElementById('transition-south').value = memory.transitions.south || 'none';
+        }
+
+        return memory;
     }
-    return false;
+    return null;
 }
 
 // Enhanced editNode function with memory
@@ -977,7 +1105,7 @@ function editNodeWithMemory(col, row) {
     const nodeKey = `${col},${row}`;
     
     // Try to load from memory first, then from saved data
-    if (!loadNodeMemory(col, row)) {
+    if (!loadedFromMemory) {
         const nodeData = mapData.nodes.get(nodeKey) || {};
         document.getElementById('nodeName').value = nodeData.name || '';
         document.getElementById('passageName').value = nodeData.passage || '';
@@ -991,6 +1119,7 @@ function editNodeWithMemory(col, row) {
         } else {
             clearIconSelection();
         }
+        populateTransitionControls(col, row);
     }
     
     // Show node editor
@@ -2777,7 +2906,7 @@ function editNodeEnhanced(col, row) {
     const nodeKey = `${col},${row}`;
     
     // Try to load from memory first, then from saved data
-    if (!loadNodeMemory(col, row)) {
+    if (!loadedFromMemory) {
         const nodeData = mapData.nodes.get(nodeKey) || {};
         
         // Basic fields
@@ -2808,6 +2937,10 @@ function editNodeEnhanced(col, row) {
         } else {
             clearIconSelection();
         }
+        populateTransitionControls(col, row);
+    } else {
+        // memory loaded
+        populateTransitionControls(col, row);
     }
     
     // Show node editor
@@ -2841,8 +2974,15 @@ function saveNodeWithFeatures() {
     };
     
     const conditions = getCurrentNodeConditions();
-    
+
     if (name || passage || icon || tags.length > 0) {
+        const transitions = {
+            north: document.getElementById('transition-north').value,
+            west: document.getElementById('transition-west').value,
+            east: document.getElementById('transition-east').value,
+            south: document.getElementById('transition-south').value
+        };
+
         mapData.nodes.set(nodeKey, {
             name: name,
             passage: passage,
@@ -2850,8 +2990,11 @@ function saveNodeWithFeatures() {
             fogOfWar: fogOfWar,
             tags: tags,
             style: style,
-            conditions: conditions
+            conditions: conditions,
+            transitions: transitions
         });
+
+        ['north','west','east','south'].forEach(dir => handleTransitionSelect(dir));
     } else {
         mapData.nodes.delete(nodeKey);
     }
@@ -3916,9 +4059,11 @@ function editNodeWithNewFeatures(col, row) {
     
     // IMPORTANT: Clear the selectedTags Set first to prevent tag bleeding between nodes
     selectedTags.clear();
+    const memory = loadNodeMemory(col, row);
+    const loadedFromMemory = !!memory;
     
     // Try to load from memory first, then from saved data
-    if (!loadNodeMemory(col, row)) {
+    if (!loadedFromMemory) {
         const nodeData = mapData.nodes.get(nodeKey) || {};
         
         // Basic fields
@@ -3952,6 +4097,10 @@ function editNodeWithNewFeatures(col, row) {
         } else {
             clearIconSelection();
         }
+    }
+
+    if (!memory || !memory.transitions) {
+        populateTransitionControls(col, row);
     }
     
     // Show node editor
@@ -4003,7 +4152,17 @@ function saveNodeWithAllFeatures() {
         }
     } else {
         mapData.nodes.delete(nodeKey);
-        
+
+        ['north','west','east','south'].forEach(dir => {
+            const [dx, dy] = directionOffsets[dir];
+            const tCol = col + dx;
+            const tRow = row + dy;
+            const key = `${col},${row}-${tCol},${tRow}`;
+            const revKey = `${tCol},${tRow}-${col},${row}`;
+            mapData.transitions.delete(key);
+            mapData.transitions.delete(revKey);
+        });
+
         // Remove from entry point registry
         for (const [type, registeredNodeKey] of entryPointRegistry.entries()) {
             if (registeredNodeKey === nodeKey) {

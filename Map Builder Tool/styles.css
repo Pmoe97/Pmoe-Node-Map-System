@@ -458,6 +458,23 @@ header h1 {
     margin-right: 0.5rem;
 }
 
+.transition-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.transition-row select {
+    flex: 1;
+}
+
+.edit-direction-conditions {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
 .form-actions {
     display: flex;
     gap: 0.5rem;
