@@ -1094,7 +1094,7 @@ function loadNodeMemory(col, row) {
         }
         return true;
     }
-    return null;
+    return false;
 }
 
 // Enhanced editNode function with memory
