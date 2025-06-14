@@ -1084,15 +1084,15 @@ function loadNodeMemory(col, row) {
         document.getElementById('nodeIcon').value = memory.icon || '';
         document.getElementById('fogOfWar').checked = memory.fogOfWar || false;
         updateNodeConditionsList(memory.conditions || []);
-
         if (memory.transitions) {
             document.getElementById('transition-north').value = memory.transitions.north || 'none';
             document.getElementById('transition-west').value = memory.transitions.west || 'none';
             document.getElementById('transition-east').value = memory.transitions.east || 'none';
             document.getElementById('transition-south').value = memory.transitions.south || 'none';
+        } else {
+            populateTransitionControls(col, row);
         }
-
-        return memory;
+        return true;
     }
     return null;
 }
@@ -4059,8 +4059,7 @@ function editNodeWithNewFeatures(col, row) {
     
     // IMPORTANT: Clear the selectedTags Set first to prevent tag bleeding between nodes
     selectedTags.clear();
-    const memory = loadNodeMemory(col, row);
-    const loadedFromMemory = !!memory;
+    const loadedFromMemory = loadNodeMemory(col, row);
     
     // Try to load from memory first, then from saved data
     if (!loadedFromMemory) {
@@ -4098,10 +4097,7 @@ function editNodeWithNewFeatures(col, row) {
             clearIconSelection();
         }
     }
-
-    if (!memory || !memory.transitions) {
-        populateTransitionControls(col, row);
-    }
+    populateTransitionControls(col, row);
     
     // Show node editor
     document.getElementById('nodeEditor').classList.remove('hidden');
