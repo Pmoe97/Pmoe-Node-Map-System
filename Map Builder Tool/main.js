@@ -1105,7 +1105,7 @@ function editNodeWithMemory(col, row) {
     const nodeKey = `${col},${row}`;
     
     // Try to load from memory first, then from saved data
-    if (!loadNodeMemory(col, row)) {
+    if (!loadedFromMemory) {
         const nodeData = mapData.nodes.get(nodeKey) || {};
         document.getElementById('nodeName').value = nodeData.name || '';
         document.getElementById('passageName').value = nodeData.passage || '';
@@ -2906,7 +2906,7 @@ function editNodeEnhanced(col, row) {
     const nodeKey = `${col},${row}`;
     
     // Try to load from memory first, then from saved data
-    if (!loadNodeMemory(col, row)) {
+    if (!loadedFromMemory) {
         const nodeData = mapData.nodes.get(nodeKey) || {};
         
         // Basic fields
@@ -4059,9 +4059,10 @@ function editNodeWithNewFeatures(col, row) {
     
     // IMPORTANT: Clear the selectedTags Set first to prevent tag bleeding between nodes
     selectedTags.clear();
+    const loadedFromMemory = loadNodeMemory(col, row);
     
     // Try to load from memory first, then from saved data
-    if (!loadNodeMemory(col, row)) {
+    if (!loadedFromMemory) {
         const nodeData = mapData.nodes.get(nodeKey) || {};
         
         // Basic fields
@@ -4096,6 +4097,7 @@ function editNodeWithNewFeatures(col, row) {
             clearIconSelection();
         }
     }
+    populateTransitionControls(col, row);
     
     // Show node editor
     document.getElementById('nodeEditor').classList.remove('hidden');
