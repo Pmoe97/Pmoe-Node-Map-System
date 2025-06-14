@@ -1077,7 +1077,7 @@ function saveNodeMemory() {
 function loadNodeMemory(col, row) {
     const nodeKey = `${col},${row}`;
     const memory = nodeMemory.get(nodeKey);
-    
+
     if (memory) {
         document.getElementById('nodeName').value = memory.name || '';
         document.getElementById('passageName').value = memory.passage || '';
@@ -1094,7 +1094,7 @@ function loadNodeMemory(col, row) {
         }
         return true;
     }
-    return false;
+    return null;
 }
 
 // Enhanced editNode function with memory
