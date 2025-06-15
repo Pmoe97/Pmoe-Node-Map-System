@@ -557,8 +557,10 @@ window.MapSystem = {
      */
     generateMinimapHTML() {
         if (!this.currentMap) return '';
-        
-        const { width, height } = this.currentMap.gridSize;
+
+        const gridSize = this.currentMap.gridSize || { width: 5, height: 5 };
+        const width = typeof gridSize.width === 'number' ? gridSize.width : 5;
+        const height = typeof gridSize.height === 'number' ? gridSize.height : 5;
         const { x: playerX, y: playerY } = this.currentPosition;
         
         // Calculate visible area (3x3 around player for minimap)
@@ -712,7 +714,9 @@ window.MapSystem = {
             return '<div class="map-placeholder">No map loaded</div>';
         }
         
-        const { width, height } = this.currentMap.gridSize;
+        const gridSize = this.currentMap.gridSize || { width: 5, height: 5 };
+        const width = typeof gridSize.width === 'number' ? gridSize.width : 5;
+        const height = typeof gridSize.height === 'number' ? gridSize.height : 5;
         const { x: playerX, y: playerY } = this.currentPosition;
         
         let html = '<div class="tile-grid full-map-grid">';
@@ -985,12 +989,16 @@ window.MapSystem = {
     getMapMetadata() {
         if (!this.currentMap) return null;
         
+        const gridSize = this.currentMap.gridSize || { width: 5, height: 5 };
+        const width = typeof gridSize.width === 'number' ? gridSize.width : 5;
+        const height = typeof gridSize.height === 'number' ? gridSize.height : 5;
+
         return {
             mapId: this.currentMap.mapId,
             name: this.currentMap.name,
             region: this.currentMap.region || null,
-            width: this.currentMap.gridSize.width,
-            height: this.currentMap.gridSize.height,
+            width,
+            height,
             entryPoints: Object.fromEntries(this.entryPointRegistry),
             tagLibrary: Array.from(this.projectTagLibrary)
         };
