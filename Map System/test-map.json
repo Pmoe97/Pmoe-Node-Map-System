@@ -1,0 +1,198 @@
+{
+  "mapId": "test-map",
+  "name": "Test",
+  "gridSize": {
+    "width": 5,
+    "height": 5
+  },
+  "defaultStart": {
+    "x": 2,
+    "y": 2
+  },
+  "nodes": [
+    {
+      "column": 2,
+      "row": 2,
+      "name": "center",
+      "passage": "center",
+      "icon": "align-center",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {
+        "primaryColor": "#007bff",
+        "secondaryColor": "#6c757d",
+        "pattern": "none"
+      },
+      "conditions": [],
+      "transitions": {
+        "west": {
+          "type": "locked",
+          "conditions": []
+        },
+        "east": {
+          "type": "one-way",
+          "conditions": []
+        },
+        "south": {
+          "type": "one-way",
+          "conditions": []
+        }
+      }
+    },
+    {
+      "column": 2,
+      "row": 3,
+      "name": "bottom",
+      "passage": "bottom",
+      "icon": "",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {
+        "primaryColor": "#007bff",
+        "secondaryColor": "#6c757d",
+        "pattern": "none"
+      },
+      "conditions": [],
+      "transitions": {}
+    },
+    {
+      "column": 3,
+      "row": 3,
+      "name": "bottom-right",
+      "passage": "bottom-right",
+      "icon": "",
+      "fogOfWar": false,
+      "tags": [
+        "bottom-right"
+      ],
+      "style": {
+        "primaryColor": "#007bff",
+        "secondaryColor": "#6c757d",
+        "pattern": "none"
+      },
+      "conditions": [],
+      "transitions": {
+        "west": {
+          "type": "bidirectional",
+          "conditions": []
+        },
+        "north": {
+          "type": "bidirectional",
+          "conditions": []
+        }
+      }
+    },
+    {
+      "column": 3,
+      "row": 2,
+      "name": "right",
+      "passage": "right",
+      "icon": "arrow-right",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {
+        "primaryColor": "#007bff",
+        "secondaryColor": "#6c757d",
+        "pattern": "none"
+      },
+      "conditions": [],
+      "transitions": {}
+    },
+    {
+      "column": 3,
+      "row": 1,
+      "name": "top-right",
+      "passage": "top-right",
+      "icon": "arrow-up-right",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {
+        "primaryColor": "#007bff",
+        "secondaryColor": "#6c757d",
+        "pattern": "none"
+      },
+      "conditions": [],
+      "transitions": {
+        "south": {
+          "type": "bidirectional",
+          "conditions": []
+        },
+        "west": {
+          "type": "bidirectional",
+          "conditions": []
+        }
+      }
+    },
+    {
+      "column": 2,
+      "row": 1,
+      "name": "top",
+      "passage": "top",
+      "icon": "arrow-up",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {
+        "primaryColor": "#007bff",
+        "secondaryColor": "#6c757d",
+        "pattern": "none"
+      },
+      "conditions": [],
+      "transitions": {
+        "south": {
+          "type": "one-way",
+          "conditions": []
+        }
+      }
+    },
+    {
+      "column": 1,
+      "row": 2,
+      "name": "left",
+      "passage": "left",
+      "icon": "arrow-left",
+      "fogOfWar": false,
+      "tags": [
+        "left"
+      ],
+      "style": {
+        "primaryColor": "#007bff",
+        "secondaryColor": "#6c757d",
+        "pattern": "none"
+      },
+      "conditions": [],
+      "transitions": {}
+    }
+  ],
+  "passageTexts": {
+    "2,2": {
+      "main": "the center node",
+      "conditions": {}
+    },
+    "2,3": {
+      "main": "The bottom node. Can't go back up.",
+      "conditions": {}
+    },
+    "3,2": {
+      "main": "The right passage. Can't go right.",
+      "conditions": {}
+    },
+    "3,1": {
+      "main": "The top right passage.",
+      "conditions": {}
+    },
+    "2,1": {
+      "main": "The top node.\n\n * DING *<<set $VisitedNorth = true>>\n\nGo down. A path has opened.",
+      "conditions": {}
+    },
+    "1,2": {
+      "main": "The left node. Congrats. What a prize.",
+      "conditions": {}
+    }
+  },
+  "projectTagLibrary": [
+    "bottom",
+    "bottom-right",
+    "left"
+  ],
+  "entryPointRegistry": {}
+}

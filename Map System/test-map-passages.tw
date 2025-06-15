@@ -1,0 +1,30 @@
+:: center
+the center node
+
+:: bottom
+The bottom node. Can't go back up.
+
+:: bottom-right
+<!-- Auto-generated passage for Test -->
+<!-- Add your passage content here -->
+
+:: right
+The right passage. Can't go right.
+
+:: top-right
+The top right passage.
+
+:: top
+The top node.
+
+ * DING *<<set $VisitedNorth = true>>
+
+Go down. A path has opened.
+
+:: left
+The left node. Congrats. What a prize.
+
+:: Test_MapData
+<!-- Map data for Test -->
+<!-- This passage contains the map configuration -->
+
