@@ -3359,26 +3359,52 @@ function exportMapEnhanced() {
             transitions: {}
         };
         
-        // Add transitions for this node
+        // Add transitions for this node (outgoing and incoming)
         for (const [transitionKey, transitionData] of mapData.transitions) {
             const [from, to] = transitionKey.split('-');
             const [fromCol, fromRow] = from.split(',').map(Number);
             const [toCol, toRow] = to.split(',').map(Number);
-            
-            if (fromCol === col && fromRow === row) {
-                // Determine direction
-                let direction;
-                if (toCol > fromCol) direction = 'east';
-                else if (toCol < fromCol) direction = 'west';
-                else if (toRow > fromRow) direction = 'south';
-                else if (toRow < fromRow) direction = 'north';
-                
-                if (direction) {
-                    exportNode.transitions[direction] = {
-                        type: transitionData.type,
-                        conditions: transitionData.conditions || []
-                    };
+
+            // Determine forward and reverse directions
+            let forwardDir, reverseDir;
+            if (toCol > fromCol) {
+                forwardDir = 'east';
+                reverseDir = 'west';
+            } else if (toCol < fromCol) {
+                forwardDir = 'west';
+                reverseDir = 'east';
+            } else if (toRow > fromRow) {
+                forwardDir = 'south';
+                reverseDir = 'north';
+            } else if (toRow < fromRow) {
+                forwardDir = 'north';
+                reverseDir = 'south';
+            }
+
+            // Outgoing transition from this node
+            if (fromCol === col && fromRow === row && forwardDir) {
+                const trans = {
+                    type: transitionData.type,
+                    conditions: transitionData.conditions || []
+                };
+                if (transitionData.type === 'one-way') {
+                    const dir = transitionData.direction || forwardDir;
+                    trans.direction = dir;
                 }
+                exportNode.transitions[forwardDir] = trans;
+            }
+
+            // Incoming transition to this node
+            if (toCol === col && toRow === row && reverseDir) {
+                const trans = {
+                    type: transitionData.type,
+                    conditions: transitionData.conditions || []
+                };
+                if (transitionData.type === 'one-way') {
+                    const dir = transitionData.direction || forwardDir;
+                    trans.direction = dir;
+                }
+                exportNode.transitions[reverseDir] = trans;
             }
         }
         
@@ -3935,26 +3961,49 @@ function exportMapWithPrompt() {
             transitions: {}
         };
         
-        // Add transitions for this node
+        // Add transitions for this node (outgoing and incoming)
         for (const [transitionKey, transitionData] of mapData.transitions) {
             const [from, to] = transitionKey.split('-');
             const [fromCol, fromRow] = from.split(',').map(Number);
             const [toCol, toRow] = to.split(',').map(Number);
-            
-            if (fromCol === col && fromRow === row) {
-                // Determine direction
-                let direction;
-                if (toCol > fromCol) direction = 'east';
-                else if (toCol < fromCol) direction = 'west';
-                else if (toRow > fromRow) direction = 'south';
-                else if (toRow < fromRow) direction = 'north';
-                
-                if (direction) {
-                    exportNode.transitions[direction] = {
-                        type: transitionData.type,
-                        conditions: transitionData.conditions || []
-                    };
+
+            let forwardDir, reverseDir;
+            if (toCol > fromCol) {
+                forwardDir = 'east';
+                reverseDir = 'west';
+            } else if (toCol < fromCol) {
+                forwardDir = 'west';
+                reverseDir = 'east';
+            } else if (toRow > fromRow) {
+                forwardDir = 'south';
+                reverseDir = 'north';
+            } else if (toRow < fromRow) {
+                forwardDir = 'north';
+                reverseDir = 'south';
+            }
+
+            if (fromCol === col && fromRow === row && forwardDir) {
+                const trans = {
+                    type: transitionData.type,
+                    conditions: transitionData.conditions || []
+                };
+                if (transitionData.type === 'one-way') {
+                    const dir = transitionData.direction || forwardDir;
+                    trans.direction = dir;
                 }
+                exportNode.transitions[forwardDir] = trans;
+            }
+
+            if (toCol === col && toRow === row && reverseDir) {
+                const trans = {
+                    type: transitionData.type,
+                    conditions: transitionData.conditions || []
+                };
+                if (transitionData.type === 'one-way') {
+                    const dir = transitionData.direction || forwardDir;
+                    trans.direction = dir;
+                }
+                exportNode.transitions[reverseDir] = trans;
             }
         }
         
