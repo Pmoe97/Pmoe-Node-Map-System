@@ -1,0 +1,23 @@
+:: NorthWestTestNode
+Welcome to the North West Test Node.
+
+You must not have made it South yet.
+
+:: NorthWestTestNodeConditionalPassageTest
+This passage text should only appear here if you visited the South Western node! Congratulations! You're quite the explorer aren't you!
+
+:: WestTestNode
+Ah yes, the Western test node. Pretty boring here.
+
+:: SouthWestTestNode
+Hey! Welcome to the South West Test node. Things are great here, but I hear that visiting here offers some real great opportunities up North a ways.
+
+<<set $VisitedSWTestNode = "true">>
+I just quietly set a variable, you didn't even see it!
+
+Anyway, journey on would ya?
+
+:: Test_Map_MapData
+<!-- Map data for Test Map -->
+<!-- This passage contains the map configuration -->
+

@@ -422,6 +422,40 @@
         </div>
     </div>
 
+    <!-- Twine File Upload Modal -->
+    <div id="twineFileModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Complete Map Import</h3>
+            <div class="import-status">
+                <div class="status-item">
+                    <span class="status-icon">✅</span>
+                    <span class="status-text">Map structure loaded successfully</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-icon">📄</span>
+                    <span class="status-text" id="mapImportDetails">Loading map details...</span>
+                </div>
+            </div>
+            <div class="twine-upload-section">
+                <h4>Optional: Upload Passage Content</h4>
+                <p>Would you like to upload a .tw file containing passage content to restore the full story text?</p>
+                <div class="form-actions">
+                    <button id="uploadTwineFile" class="upload-btn">📁 Upload .tw File</button>
+                    <button id="skipTwineFile" class="skip-btn">Skip - Continue Without Passages</button>
+                </div>
+            </div>
+            <div id="twineUploadStatus" class="upload-status hidden">
+                <div class="status-item">
+                    <span class="status-icon" id="twineStatusIcon">⏳</span>
+                    <span class="status-text" id="twineStatusText">Processing .tw file...</span>
+                </div>
+            </div>
+            <div class="form-actions final-actions hidden" id="finalImportActions">
+                <button id="completeTwineImport" class="complete-btn">Complete Import</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Placement Controls (shown during placement mode) -->
     <div id="placementControls" class="placement-controls hidden">
         <h4>Place Map Section</h4>
@@ -495,8 +529,9 @@ Markdown is supported for formatting:
         </div>
     </div>
 
-    <!-- Hidden file input for importing maps -->
+    <!-- Hidden file inputs for importing maps -->
     <input type="file" id="fileInput" accept=".json" style="display: none;">
+    <input type="file" id="twFileInput" accept=".tw" style="display: none;">
 
 
 

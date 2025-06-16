@@ -1,0 +1,120 @@
+{
+  "mapId": "TestMapJson",
+  "name": "Test Map",
+  "gridSize": {
+    "width": 3,
+    "height": 3
+  },
+  "defaultStart": {
+    "x": 0,
+    "y": 0
+  },
+  "nodes": [
+    {
+      "column": 0,
+      "row": 0,
+      "name": "NW Test Node",
+      "passage": "NorthWestTestNode",
+      "icon": "arrow-up-left",
+      "fogOfWar": false,
+      "tags": [
+        "northwest"
+      ],
+      "style": {
+        "primaryColor": "#007bff",
+        "secondaryColor": "#6c757d",
+        "pattern": "none"
+      },
+      "conditions": [
+        {
+          "type": "variable",
+          "name": "VisitedSWTestNode",
+          "operator": "==",
+          "value": "true",
+          "passage": "NorthWestTestNodeConditionalPassageTest",
+          "icon": "arrow-up-left-from-circle",
+          "description": null
+        }
+      ],
+      "transitions": {
+        "south": {
+          "type": "bidirectional",
+          "conditions": []
+        }
+      }
+    },
+    {
+      "column": 0,
+      "row": 1,
+      "name": "W Test Node",
+      "passage": "WestTestNode",
+      "icon": "",
+      "fogOfWar": false,
+      "tags": [
+        "west",
+        "entry-default"
+      ],
+      "style": {
+        "primaryColor": "#007bff",
+        "secondaryColor": "#6c757d",
+        "pattern": "none"
+      },
+      "conditions": [],
+      "transitions": {
+        "north": {
+          "type": "bidirectional",
+          "conditions": []
+        },
+        "south": {
+          "type": "bidirectional",
+          "conditions": []
+        }
+      }
+    },
+    {
+      "column": 0,
+      "row": 2,
+      "name": "SW Test Node",
+      "passage": "SouthWestTestNode",
+      "icon": "arrow-down-left",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {
+        "primaryColor": "#007bff",
+        "secondaryColor": "#6c757d",
+        "pattern": "none"
+      },
+      "conditions": [],
+      "transitions": {
+        "north": {
+          "type": "bidirectional",
+          "conditions": []
+        }
+      }
+    }
+  ],
+  "passageTexts": {
+    "0,0": {
+      "main": "Welcome to the North West Test Node.\n\nYou must not have made it South yet.",
+      "conditions": {
+        "NorthWestTestNodeConditionalPassageTest": "This passage text should only appear here if you visited the South Western node! Congratulations! You're quite the explorer aren't you!"
+      }
+    },
+    "0,1": {
+      "main": "Ah yes, the Western test node. Pretty boring here.",
+      "conditions": {}
+    },
+    "0,2": {
+      "main": "Hey! Welcome to the South West Test node. Things are great here, but I hear that visiting here offers some real great opportunities up North a ways.\n\n<<set $VisitedSWTestNode = \"true\">>\nI just quietly set a variable, you didn't even see it!\n\nAnyway, journey on would ya?",
+      "conditions": {}
+    }
+  },
+  "projectTagLibrary": [
+    "northwest",
+    "west",
+    "entry-default"
+  ],
+  "entryPointRegistry": {
+    "entry-default": "0,1"
+  }
+}

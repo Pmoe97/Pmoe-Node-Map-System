@@ -35,6 +35,10 @@ let placementMode = false;
 let pendingImportData = null;
 let placementPreviewData = null;
 
+// Dual file import state
+let pendingTwineImport = null;
+let twineFileContent = null;
+
 // NEW: Dynamic Tag Library System
 let projectTagLibrary = new Set(); // Dynamic library that grows with usage
 let selectedTags = new Set(); // Currently selected tags for the node being edited
@@ -112,6 +116,10 @@ function setupEventListeners() {
 
     // File input for importing
     document.getElementById('fileInput').addEventListener('change', handleFileImport);
+    document.getElementById('twFileInput').addEventListener('change', handleTwineFileImport);
+    
+    // Twine file upload modal listeners
+    setupTwineFileModalListeners();
     
     // Sidebar
     document.getElementById('closeSidebar').addEventListener('click', closeSidebar);
@@ -2250,7 +2258,8 @@ function handleFileImportEnhanced(event) {
             if (mapData.nodes.size > 0) {
                 showImportChoiceModal();
             } else {
-                loadImportedMap(importedData);
+                // Show Twine file modal for dual import
+                showTwineFileModal(importedData);
             }
         } catch (error) {
             alert('Error reading file: Invalid JSON format');
@@ -2266,6 +2275,207 @@ function handleFileImportEnhanced(event) {
 // Replace the original file import handler
 document.getElementById('fileInput').removeEventListener('change', handleFileImport);
 document.getElementById('fileInput').addEventListener('change', handleFileImportEnhanced);
+
+// Dual file upload functionality
+function setupTwineFileModalListeners() {
+    document.getElementById('uploadTwineFile').addEventListener('click', () => {
+        document.getElementById('twFileInput').click();
+    });
+    
+    document.getElementById('skipTwineFile').addEventListener('click', () => {
+        completeDualImport();
+    });
+    
+    document.getElementById('completeTwineImport').addEventListener('click', () => {
+        completeDualImport();
+    });
+}
+
+function showTwineFileModal(importedData) {
+    pendingTwineImport = importedData;
+    
+    // Update modal with import details
+    const nodeCount = importedData.nodes ? importedData.nodes.length : 0;
+    const hasPassageTexts = importedData.passageTexts && Object.keys(importedData.passageTexts).length > 0;
+    
+    document.getElementById('mapImportDetails').textContent = 
+        `${nodeCount} nodes loaded${hasPassageTexts ? ' (with existing passage data)' : ''}`;
+    
+    // Show the modal
+    document.getElementById('twineFileModal').classList.remove('hidden');
+}
+
+function hideTwineFileModal() {
+    document.getElementById('twineFileModal').classList.add('hidden');
+    pendingTwineImport = null;
+    twineFileContent = null;
+}
+
+function handleTwineFileImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Show processing status
+    document.getElementById('twineUploadStatus').classList.remove('hidden');
+    document.getElementById('twineStatusIcon').textContent = '⏳';
+    document.getElementById('twineStatusText').textContent = 'Processing .tw file...';
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            twineFileContent = e.target.result;
+            processTwineFile(twineFileContent);
+        } catch (error) {
+            document.getElementById('twineStatusIcon').textContent = '❌';
+            document.getElementById('twineStatusText').textContent = 'Error reading .tw file';
+            console.error('Twine file import error:', error);
+        }
+    };
+    reader.readAsText(file);
+    
+    // Reset file input
+    event.target.value = '';
+}
+
+function processTwineFile(twineContent) {
+    try {
+        const parsedPassages = parseTwineFile(twineContent);
+        
+        if (parsedPassages.size === 0) {
+            document.getElementById('twineStatusIcon').textContent = '⚠️';
+            document.getElementById('twineStatusText').textContent = 'No passages found in .tw file';
+        } else {
+            // Merge parsed passages with pending import data
+            if (pendingTwineImport) {
+                mergeTwinePassages(pendingTwineImport, parsedPassages);
+            }
+            
+            document.getElementById('twineStatusIcon').textContent = '✅';
+            document.getElementById('twineStatusText').textContent = 
+                `Successfully processed ${parsedPassages.size} passages`;
+        }
+        
+        // Show completion button
+        document.getElementById('finalImportActions').classList.remove('hidden');
+        
+    } catch (error) {
+        document.getElementById('twineStatusIcon').textContent = '❌';
+        document.getElementById('twineStatusText').textContent = 'Error processing .tw file';
+        console.error('Twine file processing error:', error);
+    }
+}
+
+function parseTwineFile(content) {
+    const passages = new Map();
+    const lines = content.split('\n');
+    let currentPassage = null;
+    let currentContent = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // Check for passage header (:: PassageName)
+        if (line.startsWith(':: ')) {
+            // Save previous passage if exists
+            if (currentPassage) {
+                passages.set(currentPassage, currentContent.join('\n').trim());
+            }
+            
+            // Start new passage
+            currentPassage = line.substring(3).trim();
+            currentContent = [];
+        } else if (currentPassage) {
+            // Add line to current passage content
+            currentContent.push(line);
+        }
+    }
+    
+    // Save the last passage
+    if (currentPassage) {
+        passages.set(currentPassage, currentContent.join('\n').trim());
+    }
+    
+    return passages;
+}
+
+function mergeTwinePassages(importData, parsedPassages) {
+    // Create a map to store passage texts by node key
+    const nodePassageTexts = new Map();
+    
+    // Go through each node and try to find matching passages
+    importData.nodes.forEach(node => {
+        const col = node.x !== undefined ? node.x : node.column;
+        const row = node.y !== undefined ? node.y : node.row;
+        const nodeKey = `${col},${row}`;
+        
+        const passageData = {
+            main: '',
+            conditions: {}
+        };
+        
+        // Look for main passage
+        if (node.passage && parsedPassages.has(node.passage)) {
+            passageData.main = parsedPassages.get(node.passage);
+        }
+        
+        // Look for conditional passages
+        if (node.conditions && Array.isArray(node.conditions)) {
+            node.conditions.forEach(condition => {
+                if (condition.passage && parsedPassages.has(condition.passage)) {
+                    passageData.conditions[condition.passage] = parsedPassages.get(condition.passage);
+                }
+            });
+        }
+        
+        // Only store if we found some content
+        if (passageData.main || Object.keys(passageData.conditions).length > 0) {
+            nodePassageTexts.set(nodeKey, passageData);
+        }
+    });
+    
+    // Store the merged passage texts in the import data
+    importData.passageTexts = Object.fromEntries(nodePassageTexts);
+}
+
+function completeDualImport() {
+    if (!pendingTwineImport) return;
+    
+    // Load the map with the merged data
+    loadImportedMapWithPassages(pendingTwineImport);
+    
+    // Hide the modal
+    hideTwineFileModal();
+}
+
+function loadImportedMapWithPassages(importedData) {
+    // Use the existing loadImportedMap function but also load passage texts
+    loadImportedMap(importedData);
+    
+    // Load passage texts if they exist
+    if (importedData.passageTexts) {
+        // Clear existing passage texts
+        passageTexts.clear();
+        
+        // Load the passage texts
+        Object.entries(importedData.passageTexts).forEach(([nodeKey, passageData]) => {
+            passageTexts.set(nodeKey, passageData);
+        });
+        
+        console.log(`Loaded passage texts for ${Object.keys(importedData.passageTexts).length} nodes`);
+    }
+    
+    // Load additional data if present
+    if (importedData.projectTagLibrary) {
+        importedData.projectTagLibrary.forEach(tag => projectTagLibrary.add(tag));
+    }
+    
+    if (importedData.entryPointRegistry) {
+        Object.entries(importedData.entryPointRegistry).forEach(([type, nodeKey]) => {
+            entryPointRegistry.set(type, nodeKey);
+        });
+        updateEntryPointVisuals();
+    }
+}
 
 // NEW: Navigation and interaction functionality
 function setupNavigationListeners() {
