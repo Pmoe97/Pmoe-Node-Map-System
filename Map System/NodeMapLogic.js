@@ -81,6 +81,8 @@ window.MapSystem = {
         // Set position
         if (position) {
             this.currentPosition = { ...position };
+        } else if (mapData.defaultStart) {
+            this.currentPosition = { ...mapData.defaultStart };
         } else if (mapData.playerStartPosition) {
             this.currentPosition = { ...mapData.playerStartPosition };
         } else {
@@ -167,7 +169,12 @@ window.MapSystem = {
     getNodeAt(x, y) {
         if (!this.currentMap) return null;
         
-        return this.currentMap.nodes.find(node => node.x === x && node.y === y);
+        // Handle both x,y and column,row formats
+        return this.currentMap.nodes.find(node => {
+            const nodeX = node.x !== undefined ? node.x : node.column;
+            const nodeY = node.y !== undefined ? node.y : node.row;
+            return nodeX === x && nodeY === y;
+        });
     },
     
     /**
@@ -177,46 +184,39 @@ window.MapSystem = {
         if (!this.currentMap || this.movementBlocked) {
             return false;
         }
-        
+
         const currentNode = this.getNodeAt(this.currentPosition.x, this.currentPosition.y);
         if (!currentNode) {
             return false;
         }
-        
+
         const transition = currentNode.transitions[direction];
         if (!transition) {
             return false;
         }
-        
-        // Check transition type
-        if (transition.type === "none") {
+
+        // ✅ Dynamically evaluate transition type
+        const effectiveType = this.getEffectiveTransitionType(transition);
+
+        // 🔒 None or locked transitions are blocked
+        if (effectiveType === "none" || effectiveType === "locked") {
             return false;
         }
 
-        if (transition.type === "bidirectional") {
-            // Bidirectional always allowed if conditions pass
-            return this.checkTransitionConditions(transition.conditions);
-        }        
-        
-        if (transition.type === "secret") {
-            // Secret transitions are hidden until unlocked
-            if (!this.isTransitionRevealed(currentNode, direction)) {
-                return false;
-            }
-        }
-        
-        if (transition.type === "one-way" && transition.direction !== direction) {
+        // 🕵️ Secret transitions only work if revealed
+        if (effectiveType === "secret" && !this.isTransitionRevealed(currentNode, direction)) {
             return false;
         }
-        
-        // Check if transition is currently locked by conditions
-        if (this.isTransitionLocked(transition)) {
+
+        // 🔁 One-way transitions only work if direction matches
+        if (effectiveType === "one-way" && transition.direction !== direction) {
             return false;
         }
-        
-        // Check conditions
+
+        // ✅ Finally, check if any conditions are unmet
         return this.checkTransitionConditions(transition.conditions);
     },
+
     
     /**
      * Check if a transition is currently locked by its conditions
@@ -295,6 +295,20 @@ window.MapSystem = {
         
         return true;
     },
+
+    parseConditionValue(rawValue) {
+        if (rawValue === true || rawValue === false) return rawValue;
+        if (typeof rawValue === 'number') return rawValue;
+        if (typeof rawValue !== 'string') return rawValue;
+
+        const trimmed = rawValue.trim();
+        if (trimmed === "true") return true;
+        if (trimmed === "false") return false;
+        if (!isNaN(trimmed)) return Number(trimmed);
+
+        return trimmed;
+    },
+
     
     /**
      * Evaluate a single condition
@@ -302,47 +316,42 @@ window.MapSystem = {
     evaluateCondition(condition) {
         const player = State.variables.player;
         const inventory = State.variables.inventory_player || {};
-        
-        // Handle both old and new condition formats
+
         const conditionType = condition.type;
         const operator = condition.operator || "==";
         let targetValue, actualValue;
-        
+
         switch (conditionType) {
-            case "variable":
-                // New format: condition.name contains the variable path
-                // Old format: condition.variable contains the variable path
+            case "variable": {
                 const variablePath = condition.name || condition.variable;
                 actualValue = this.getNestedValue(State.variables, variablePath);
-                targetValue = condition.value;
+                targetValue = this.parseConditionValue(condition.value);
                 break;
-                
-            case "item":
-                // New format: condition.name contains the item name
-                // Old format: condition.item contains the item name
+            }
+
+            case "item": {
                 const itemName = condition.name || condition.item;
                 actualValue = inventory[itemName] || 0;
-                targetValue = condition.value || true; // Default to checking if item exists
+                targetValue = this.parseConditionValue(condition.value || true);
                 break;
-                
-            case "quest":
-                // New format: condition.name contains the quest name
-                // Old format: condition.quest contains the quest name
+            }
+
+            case "quest": {
                 const questName = condition.name || condition.quest;
-                // Implement quest condition checking based on your quest system
-                // For now, assume quests are stored in State.variables.quests
                 const quests = State.variables.quests || {};
                 actualValue = quests[questName] || false;
-                targetValue = condition.value || true; // Default to checking if quest is completed
+                targetValue = this.parseConditionValue(condition.value || true);
                 break;
-                
+            }
+
             default:
                 console.warn(`[MapSystem] Unknown condition type: ${conditionType}`);
                 return true;
         }
-        
+
         return this.compareValues(actualValue, operator, targetValue);
     },
+
     
     /**
      * Get nested object value by dot notation
@@ -391,43 +400,53 @@ window.MapSystem = {
             console.log(`[MapSystem] Movement blocked: ${direction}`);
             return false;
         }
-        
+
         const targetPos = this.getTargetPosition(direction);
         if (!targetPos) {
             return false;
         }
-        
+
         // Check if target position has a node
         const targetNode = this.getNodeAt(targetPos.x, targetPos.y);
         if (!targetNode) {
             console.log(`[MapSystem] No node at target position (${targetPos.x}, ${targetPos.y})`);
             return false;
         }
-        
+
         // Update position
         this.currentPosition = targetPos;
         State.variables.player.mapState.position = { ...targetPos };
-        
+
         // Reveal tiles for fog of war
         if (this.currentMap.fogOfWar) {
             this.revealTile(this.currentMap.mapId, targetPos.x, targetPos.y);
-            // Reveal adjacent tiles
             this.revealAdjacentTiles(this.currentMap.mapId, targetPos.x, targetPos.y);
         }
-        
-        // Update displays
+
+        // Update displays (may be overwritten by passage change)
         this.updateMinimapDisplay();
         this.updateLocationInfo();
-        
+
         // Get the effective node data (applying conditions)
         const effectiveNode = this.getEffectiveNodeData(targetNode);
-        
+
         // Navigate to the target passage
         if (effectiveNode.passage) {
             console.log(`[MapSystem] Moving to passage: ${effectiveNode.passage}`);
             Engine.play(effectiveNode.passage);
+
+            // 🧠 DEFERRED redraw of minimap after sidebar DOM is fully rebuilt
+            setTimeout(() => {
+                const container = document.getElementById("tile-map-container");
+                if (container) {
+                    this.updateMinimapDisplay();
+                    console.log("🧭 Forced minimap redraw after move (delayed)");
+                } else {
+                    console.warn("⚠️ Could not redraw minimap: container missing");
+                }
+            }, 0);
         }
-        
+
         return true;
     },
     
@@ -540,109 +559,157 @@ window.MapSystem = {
      */
     updateMinimapDisplay() {
         const container = document.getElementById('tile-map-container');
-        if (!container || !this.currentMap) {
+
+        if (!container) {
+            console.warn("[MapSystem] updateMinimapDisplay aborted — #tile-map-container not found.");
             return;
         }
-        
+
+        if (!this.currentMap) {
+            console.warn("[MapSystem] updateMinimapDisplay aborted — no current map.");
+            return;
+        }
+
         // Generate minimap HTML
         const minimapHtml = this.generateMinimapHTML();
+
+        if (!minimapHtml || minimapHtml.trim() === '') {
+            console.warn("[MapSystem] Minimap rendering failed — HTML output was blank. Skipping DOM injection.");
+            return;
+        }
+
         container.innerHTML = minimapHtml;
-        
+        console.log("🔍 Minimap container after HTML injection:", container.innerHTML);
+
         // Update minimap info
         this.updateMinimapInfo();
-        
+
         // Re-render Lucide icons
         if (window.lucide) {
             lucide.createIcons();
         }
+
+        // 🧭 Center the player tile in the minimap view
+        const playerTile = container.querySelector('.player-tile');
+        if (playerTile) {
+            const scrollLeft = playerTile.offsetLeft - (container.clientWidth / 2) + (playerTile.clientWidth / 2);
+            const scrollTop = playerTile.offsetTop - (container.clientHeight / 2) + (playerTile.clientHeight / 2);
+
+            container.scrollLeft = scrollLeft;
+            container.scrollTop = scrollTop;
+
+
+            console.log("[MapSystem] Minimap auto-scrolled to center on player.");
+        } else {
+            console.warn("[MapSystem] Player tile not found in minimap.");
+        }
+
+        console.log("[MapSystem] Minimap updated successfully.");
     },
     
     /**
      * Generate minimap HTML with enhanced styling support
      */
     generateMinimapHTML() {
-        if (!this.currentMap) return '';
-
-        const gridSize = this.currentMap.gridSize || { width: 5, height: 5 };
-        const width = typeof gridSize.width === 'number' ? gridSize.width : 5;
-        const height = typeof gridSize.height === 'number' ? gridSize.height : 5;
-        const { x: playerX, y: playerY } = this.currentPosition;
-        
-        // Calculate visible area (3x3 around player for minimap)
-        const minX = Math.max(1, playerX - 1);
-        const maxX = Math.min(width, playerX + 1);
-        const minY = Math.max(1, playerY - 1);
-        const maxY = Math.min(height, playerY + 1);
-        
-        let html = '<div class="tile-grid minimap-grid">';
-        
-        for (let y = minY; y <= maxY; y++) {
-            for (let x = minX; x <= maxX; x++) {
-                const node = this.getNodeAt(x, y);
-                const isPlayer = (x === playerX && y === playerY);
-                const isRevealed = this.isTileRevealed(this.currentMap.mapId, x, y);
-                
-                let tileClass = 'tile minimap-tile';
-                let tileContent = '';
-                let tileStyle = '';
-                
-                if (!isRevealed && this.currentMap.fogOfWar) {
-                    tileClass += ' tile-hidden';
-                } else if (node) {
-                    tileClass += ' tile-node';
-                    
-                    // Apply node styling
-                    if (node.style) {
-                        tileStyle = this.generateNodeStyle(node.style);
-                        if (node.style.pattern && node.style.pattern !== 'none') {
-                            tileClass += ` node-pattern-${node.style.pattern}`;
-                        }
-                    }
-                    
-                    // Add entry point indicator
-                    if (node.tags && node.tags.some(tag => tag.startsWith('entry-'))) {
-                        tileClass += ' entry-point';
-                    }
-                    
-                    // Add region/tag classes for styling
-                    if (node.tags) {
-                        node.tags.forEach(tag => {
-                            tileClass += ` tag-${tag.replace(/[^a-zA-Z0-9-]/g, '-')}`;
-                        });
-                    }
-                    
-                    if (isPlayer) {
-                        tileClass += ' player-tile';
-                        tileContent = '<i data-lucide="user" class="player-indicator"></i>';
-                    } else {
-                        const effectiveNode = this.getEffectiveNodeData(node);
-                        if (effectiveNode.icon) {
-                            tileContent = `<i data-lucide="${effectiveNode.icon}" class="tile-icon"></i>`;
-                        }
-                    }
-                    
-                    // Add transitions
-                    if (node.transitions) {
-                        Object.keys(node.transitions).forEach(dir => {
-                            const transition = node.transitions[dir];
-                            tileClass += ` has-${dir}`;
-                            
-                            if (transition.type === 'one-way') {
-                                tileClass += ` oneway-${dir}`;
-                            }
-                        });
-                    }
-                } else {
-                    tileClass += ' tile-empty';
-                }
-                
-                html += `<div class="${tileClass}" data-x="${x}" data-y="${y}" style="${tileStyle}">${tileContent}</div>`;
+        try {
+            if (!this.currentMap) {
+                console.warn("[MapSystem] No current map loaded in generateMinimapHTML.");
+                return '';
             }
+
+            const gridSize = this.currentMap.gridSize || { width: 5, height: 5 };
+            const width = typeof gridSize.width === 'number' ? gridSize.width : 5;
+            const height = typeof gridSize.height === 'number' ? gridSize.height : 5;
+            const { x: playerX, y: playerY } = this.currentPosition;
+
+            console.log(`[MapSystem] Rendering full minimap: ${width}x${height} on map "${this.currentMap.mapId || '[no id]'}"`);
+
+            let html = `<div class="tile-grid minimap-grid" style="grid-template-columns: repeat(${width}, 1fr);">`;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const node = this.getNodeAt(x, y);
+                    const isPlayer = (x === playerX && y === playerY);
+                    const isRevealed = this.isTileRevealed(this.currentMap.mapId, x, y);
+
+                    let tileClass = 'tile minimap-tile';
+                    let tileContent = '';
+                    let tileStyle = '';
+
+                    if (!isRevealed && this.currentMap.fogOfWar) {
+                        tileClass += ' tile-hidden';
+                    } else if (node) {
+                        tileClass += ' tile-node';
+
+                        if (node.style) {
+                            try {
+                                tileStyle = this.generateNodeStyle(node.style);
+                                if (node.style.pattern && node.style.pattern !== 'none') {
+                                    tileClass += ` node-pattern-${node.style.pattern}`;
+                                }
+                            } catch (styleError) {
+                                console.warn(`[MapSystem] Style error on node (${x},${y}):`, styleError);
+                            }
+                        }
+
+                        if (node.tags) {
+                            try {
+                                if (node.tags.some(tag => tag.startsWith('entry-'))) {
+                                    tileClass += ' entry-point';
+                                }
+                                node.tags.forEach(tag => {
+                                    tileClass += ` tag-${tag.replace(/[^a-zA-Z0-9-]/g, '-')}`;
+                                });
+                            } catch (tagError) {
+                                console.warn(`[MapSystem] Tag error on node (${x},${y}):`, tagError);
+                            }
+                        }
+
+                        if (isPlayer) {
+                            tileClass += ' player-tile';
+                            tileContent = '<i data-lucide="user" class="player-indicator"></i>';
+                        } else {
+                            try {
+                                const effectiveNode = this.getEffectiveNodeData(node);
+                                if (effectiveNode.icon) {
+                                    tileContent = `<i data-lucide="${effectiveNode.icon}" class="tile-icon"></i>`;
+                                }
+                            } catch (iconError) {
+                                console.warn(`[MapSystem] Icon error on node (${x},${y}):`, iconError);
+                            }
+                        }
+
+                        if (node.transitions) {
+                            try {
+                                Object.keys(node.transitions).forEach(dir => {
+                                    const transition = node.transitions[dir];
+                                    tileClass += ` has-${dir}`;
+                                    if (transition.type === 'one-way') {
+                                        tileClass += ` oneway-${dir}`;
+                                    }
+                                });
+                            } catch (transitionError) {
+                                console.warn(`[MapSystem] Transition error on node (${x},${y}):`, transitionError);
+                            }
+                        }
+                    } else {
+                        tileClass += ' tile-empty';
+                    }
+
+                    html += `<div class="${tileClass}" data-x="${x}" data-y="${y}" style="${tileStyle}">${tileContent}</div>`;
+                }
+            }
+
+            html += '</div>';
+            return html;
+
+        } catch (e) {
+            console.error("[MapSystem] Error generating minimap HTML:", e);
+            return '<div class="tile-grid minimap-grid"><div class="tile minimap-tile tile-error">❌</div></div>';
         }
-        
-        html += '</div>';
-        return html;
     },
+
+
     
     /**
      * Update minimap info display
@@ -719,15 +786,13 @@ window.MapSystem = {
             return '<div class="map-placeholder">No map loaded</div>';
         }
         
-        const gridSize = this.currentMap.gridSize || { width: 5, height: 5 };
-        const width = typeof gridSize.width === 'number' ? gridSize.width : 5;
-        const height = typeof gridSize.height === 'number' ? gridSize.height : 5;
+        const { width, height } = this.currentMap.gridSize;
         const { x: playerX, y: playerY } = this.currentPosition;
         
-        let html = '<div class="tile-grid full-map-grid">';
+        let html = `<div class="tile-grid full-map-grid" style="grid-template-columns: repeat(${width}, 40px); grid-template-rows: repeat(${height}, 40px);">`;
         
-        for (let y = 1; y <= height; y++) {
-            for (let x = 1; x <= width; x++) {
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
                 const node = this.getNodeAt(x, y);
                 const isPlayer = (x === playerX && y === playerY);
                 const isRevealed = this.isTileRevealed(this.currentMap.mapId, x, y);
@@ -994,16 +1059,12 @@ window.MapSystem = {
     getMapMetadata() {
         if (!this.currentMap) return null;
         
-        const gridSize = this.currentMap.gridSize || { width: 5, height: 5 };
-        const width = typeof gridSize.width === 'number' ? gridSize.width : 5;
-        const height = typeof gridSize.height === 'number' ? gridSize.height : 5;
-
         return {
             mapId: this.currentMap.mapId,
             name: this.currentMap.name,
             region: this.currentMap.region || null,
-            width,
-            height,
+            width: this.currentMap.gridSize.width,
+            height: this.currentMap.gridSize.height,
             entryPoints: Object.fromEntries(this.entryPointRegistry),
             tagLibrary: Array.from(this.projectTagLibrary)
         };
@@ -1051,6 +1112,7 @@ window.MapSystem = {
         
         return availableEntries;
     }
+
 };
 
 // Initialize when DOM is ready
@@ -1064,4 +1126,13 @@ $(document).on(':passagedisplay', () => {
         MapSystem.updateMinimapDisplay();
         MapSystem.updateLocationInfo();
     }
+});
+
+// Update full map when journal map tab is opened
+$(document).on('click', '[data-tab="map"]', () => {
+    setTimeout(() => {
+        if (MapSystem.currentMap) {
+            MapSystem.updateFullMapDisplay();
+        }
+    }, 100);
 });

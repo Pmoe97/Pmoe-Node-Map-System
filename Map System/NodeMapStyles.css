@@ -1,4 +1,12 @@
-/* Map-specific styles */
+/* =============================
+=         Map System Styles      
+============================= */
+
+/* =============================
+=      Journal Map Section      
+============================= */
+
+/* Map-specific styles within journal */
 .map-section {
   height: 100%;
   display: flex;
@@ -61,6 +69,10 @@
   font-size: 3em;
   margin-bottom: 15px;
 }
+
+/* =============================
+=         Map Legend           
+============================= */
 
 .map-legend {
   margin-top: 15px;
@@ -136,93 +148,338 @@
   border-bottom: 3px solid transparent;
 }
 
-/* ===== ENHANCED STYLING FEATURES ===== */
+/* =============================
+=         Sidebar Minimap      
+============================= */
 
-/* Tile Grid Enhancements */
+#sidebar-minimap-container {
+  margin: 12px 8px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 8px;
+  position: relative;
+  height: 250px;
+}
+
+.minimap-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #4a90e2;
+}
+
+.minimap-header i {
+  width: 16px;
+  height: 16px;
+  stroke: #4a90e2;
+}
+
+.minimap-header span {
+  flex: 1;
+}
+
+.minimap-control-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #555;
+  color: #ccc;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.2s ease;
+}
+
+.minimap-control-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.minimap-control-btn i {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+}
+
+.minimap-display {
+  width: 260px;
+  height: 180px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+  background: #0a0a0a;
+  padding: 2px;
+}
+
+.minimap-info {
+  margin-top: 6px;
+  font-size: 0.7em;
+  color: #888;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.minimap-location {
+  color: #4a90e2;
+  font-weight: 600;
+}
+
+.minimap-position {
+  color: #ccc;
+}
+
+/* =============================
+=         Mobile Map UI        
+============================= */
+
+/* Mobile floating minimap */
+#mobile-minimap-overlay {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  width: 180px;
+  height: 140px;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid #333;
+  border-radius: 8px;
+  z-index: 1000;
+  padding: 8px;
+  display: none;
+}
+
+#mobile-minimap-overlay .minimap-display {
+  width: 100%;
+  height: 100px;
+}
+
+#mobile-minimap-overlay .minimap-info {
+  font-size: 0.6em;
+  margin-top: 4px;
+}
+
+/* Touch movement controls */
+#mobile-movement-controls {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 120px;
+  height: 120px;
+  z-index: 1001;
+  display: none;
+}
+
+.movement-dpad {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 2px;
+}
+
+.movement-btn {
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid #555;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.2s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.movement-btn:active {
+  background: rgba(74, 144, 226, 0.8);
+  transform: scale(0.95);
+}
+
+.movement-btn.north {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.movement-btn.west {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.movement-btn.east {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.movement-btn.south {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+/* =============================
+=         Tile Grid System     
+============================= */
+
+/* Base tile grid - restore grid functionality */
 .tile-grid {
   display: grid;
   gap: 2px;
-  padding: 10px;
-  background: #111;
+  background: transparent;
+  padding: 20px;
   border-radius: 4px;
+  min-height: 400px;
+  width: 100%;
+  height: 100%;
 }
 
+/* Minimap grid - supports dynamic sizing */
 .minimap-grid {
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  max-width: 150px;
-  max-height: 150px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  justify-content: center;
+  align-content: center;
+  grid-auto-flow: row;
+  max-width: 100%;
+  overflow: auto;
 }
 
+/* Full map grid - dynamic based on map size */
 .full-map-grid {
-  grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
-  gap: 1px;
+  display: grid;
+  grid-template-columns: repeat(3, 60px);
+  grid-template-rows: repeat(3, 60px);
+  gap: 20px;
+  padding: 40px;
+  justify-content: center;
+  align-content: center;
+  min-height: 500px;
+  width: 100%;
 }
 
-/* Enhanced Tile Styling */
+/* Enhanced full map grid for larger maps */
+.full-map-grid.large {
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 20px;
+  min-height: 700px;
+  padding: 60px;
+}
+
+/* =============================
+=         Tile Styling         
+============================= */
+
+/* Base tile styling */
 .tile {
   position: relative;
-  background: #222;
-  border: 1px solid #444;
-  border-radius: 3px;
-  min-height: 40px;
-  min-width: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  overflow: hidden;
+  overflow: visible;
 }
 
-.tile.minimap-tile {
-  min-height: 30px;
-  min-width: 30px;
+/* Minimap tiles - compact grid layout */
+.minimap-tile {
+  width: 100%;
+  height: 100%;
+  background: #2a2a2a;
+  border: 2px solid #4a90e2;
+  border-radius: 12px;
+  min-width: unset;
+  min-height: unset;
 }
 
-.tile.full-map-tile {
-  min-height: 50px;
-  min-width: 50px;
+/* Full map tiles - node-based styling */
+.full-map-tile {
+  width: 60px;
+  height: 60px;
+  background: #2a2a2a;
+  border: 2px solid #4a90e2;
+  border-radius: 16px;
+  cursor: default;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* Node States */
-.tile-node {
-  background: #333;
-  border-color: #555;
-}
-
+/* Tile states */
 .tile-empty {
-  background: #1a1a1a;
-  border-color: #333;
-  opacity: 0.6;
+  visibility: hidden; /* Hide empty tiles but keep grid space */
+  opacity: 0;
+}
+
+.tile-node {
+  background: #2a2a2a;
+  border: 2px solid #4a90e2;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  width: 48px;
+  height: 48px;
 }
 
 .tile-hidden {
-  background: #000;
-  border-color: #222;
-  opacity: 0.3;
+  visibility: hidden; /* Hide hidden tiles but keep grid space */
+  opacity: 0;
 }
 
-/* Player Indicator */
+.tile-clickable {
+  cursor: pointer;
+  border-color: #4a90e2;
+}
+
+.tile-clickable:hover {
+  background: rgba(74, 144, 226, 0.2);
+  border-color: #6bb6ff;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4);
+}
+
+/* =============================
+=         Player Indicator     
+============================= */
+
+/* Player tile */
 .player-tile {
-  background: #4a90e2 !important;
-  border-color: #6bb6ff !important;
-  box-shadow: 0 0 10px rgba(74, 144, 226, 0.5);
+  background: radial-gradient(circle, rgba(74, 144, 226, 0.3) 0%, rgba(74, 144, 226, 0.1) 70%) !important;
+  border-color: #4a90e2 !important;
+  box-shadow: 0 0 10px rgba(74, 144, 226, 0.6);
   animation: pulse 2s infinite;
 }
 
-@keyframes pulse {
-  0% { box-shadow: 0 0 10px rgba(74, 144, 226, 0.5); }
-  50% { box-shadow: 0 0 20px rgba(74, 144, 226, 0.8); }
-  100% { box-shadow: 0 0 10px rgba(74, 144, 226, 0.5); }
-}
-
+/* Player indicator */
 .player-indicator {
-  color: white;
+  color: #4a90e2;
+  width: 16px;
+  height: 16px;
   font-size: 1.2em;
-  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.8));
+  animation: pulse 2s infinite;
+  filter: drop-shadow(0 0 3px rgba(74, 144, 226, 0.8));
 }
 
-/* Entry Points */
+@keyframes pulse {
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1);
+    box-shadow: 0 0 10px rgba(74, 144, 226, 0.5);
+  }
+  50% { 
+    opacity: 0.7; 
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(74, 144, 226, 0.8);
+  }
+}
+
+/* =============================
+=         Entry Points         
+============================= */
+
 .entry-point {
   border-color: #ffd700 !important;
   box-shadow: inset 0 0 5px rgba(255, 215, 0, 0.3);
@@ -240,7 +497,10 @@
   box-shadow: 0 0 3px rgba(255, 215, 0, 0.8);
 }
 
-/* Node Pattern Styles */
+/* =============================
+=         Node Patterns        
+============================= */
+
 .node-pattern-diagonal-stripes {
   background-image: repeating-linear-gradient(
     45deg,
@@ -300,7 +560,10 @@
   background-color: var(--node-primary-color, #007bff);
 }
 
-/* Tag-based Styling */
+/* =============================
+=         Tag-based Styling    
+============================= */
+
 .tag-interior {
   border-left: 3px solid #8b4513;
 }
@@ -335,92 +598,321 @@
   box-shadow: inset 0 0 5px rgba(255, 69, 0, 0.2);
 }
 
-/* Transition Indicators */
-.tile.has-north::before {
+/* =============================
+=         Connection Lines      
+============================= */
+
+/* Base connection line styling */
+.tile::before,
+.tile::after {
   content: '';
   position: absolute;
-  top: -1px;
+  background: #4a90e2;
+  opacity: 0.8;
+  z-index: -1;
+  border-radius: 1px;
+}
+
+/* North/South connections - vertical lines */
+.tile.has-north::before {
+  top: -30px;
   left: 50%;
   transform: translateX(-50%);
-  width: 8px;
-  height: 3px;
-  background: #4a90e2;
-  border-radius: 0 0 2px 2px;
+  width: 4px;
+  height: 30px;
+  background: linear-gradient(to bottom, #4a90e2, rgba(74, 144, 226, 0.8));
 }
 
 .tile.has-south::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
+  bottom: -30px;
   left: 50%;
   transform: translateX(-50%);
-  width: 8px;
-  height: 3px;
-  background: #4a90e2;
-  border-radius: 2px 2px 0 0;
+  width: 4px;
+  height: 30px;
+  background: linear-gradient(to top, #4a90e2, rgba(74, 144, 226, 0.8));
 }
 
+/* East/West connections - horizontal lines */
 .tile.has-east {
-  border-right: 3px solid #4a90e2;
+  position: relative;
+}
+
+.tile.has-east::after {
+  content: '';
+  position: absolute;
+  right: -30px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 4px;
+  background: linear-gradient(to right, rgba(74, 144, 226, 0.8), #4a90e2);
+  z-index: -1;
+  border-radius: 1px;
 }
 
 .tile.has-west {
-  border-left: 3px solid #4a90e2;
+  position: relative;
 }
 
-/* One-way Transition Indicators */
+.tile.has-west::before {
+  content: '';
+  position: absolute;
+  left: -30px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 4px;
+  background: linear-gradient(to left, rgba(74, 144, 226, 0.8), #4a90e2);
+  z-index: -1;
+  border-radius: 1px;
+}
+
+/* Handle nodes with both north and west connections */
+.tile.has-north.has-west::before {
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 30px;
+  background: linear-gradient(to bottom, #4a90e2, rgba(74, 144, 226, 0.8));
+}
+
+.tile.has-north.has-west::after {
+  content: '';
+  position: absolute;
+  left: -30px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 4px;
+  background: linear-gradient(to left, rgba(74, 144, 226, 0.8), #4a90e2);
+  z-index: -1;
+  border-radius: 1px;
+}
+
+/* One-way transition styling - different colors */
 .tile.oneway-north::before {
-  background: #ff6b35;
+  background: linear-gradient(to bottom, #ff6b35, rgba(255, 107, 53, 0.8));
 }
 
 .tile.oneway-south::after {
-  background: #ff6b35;
+  background: linear-gradient(to top, #ff6b35, rgba(255, 107, 53, 0.8));
 }
 
-.tile.oneway-east {
-  border-right-color: #ff6b35;
+.tile.oneway-east::after {
+  background: linear-gradient(to right, rgba(255, 107, 53, 0.8), #ff6b35);
 }
 
-.tile.oneway-west {
-  border-left-color: #ff6b35;
+.tile.oneway-west::before {
+  background: linear-gradient(to left, rgba(255, 107, 53, 0.8), #ff6b35);
 }
 
-/* Interactive Elements */
-.tile-clickable {
-  cursor: pointer;
-  border-color: #4a90e2;
+/* Dashed lines for restricted transitions */
+.tile.restricted-north::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    #ff4444,
+    #ff4444 4px,
+    transparent 4px,
+    transparent 8px
+  );
 }
 
-.tile-clickable:hover {
-  background: #444;
-  border-color: #6bb6ff;
-  transform: scale(1.05);
+.tile.restricted-south::after {
+  background: repeating-linear-gradient(
+    to top,
+    #ff4444,
+    #ff4444 4px,
+    transparent 4px,
+    transparent 8px
+  );
 }
 
-/* Icons */
+.tile.restricted-east::after {
+  background: repeating-linear-gradient(
+    to right,
+    #ff4444,
+    #ff4444 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+.tile.restricted-west::before {
+  background: repeating-linear-gradient(
+    to left,
+    #ff4444,
+    #ff4444 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+/* =============================
+=         Tile Icons           
+============================= */
+
 .tile-icon {
-  color: #ccc;
-  font-size: 1.1em;
+  width: 24px;
+  height: 24px;
+  color: #fff;
+  font-size: 1.5em;
+  transition: color 0.2s ease;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
 }
 
+.tile-node:hover .tile-icon {
+  color: #6bb6ff;
+}
+
 .minimap-tile .tile-icon {
-  font-size: 0.9em;
+  width: 16px;
+  height: 16px;
+  font-size: 1em;
 }
 
 .full-map-tile .tile-icon {
-  font-size: 1.3em;
+  width: 24px;
+  height: 24px;
+  font-size: 1.5em;
 }
 
-/* Responsive Design */
+/* =============================
+=         Special Locations    
+============================= */
+
+.tile[data-icon="beer"] {
+  background: rgba(255, 165, 0, 0.1);
+  border-color: #ffa500;
+}
+
+.tile[data-icon="flask-conical"] {
+  background: rgba(50, 205, 50, 0.1);
+  border-color: #32cd32;
+}
+
+.tile[data-icon="bed-double"] {
+  background: rgba(255, 105, 180, 0.1);
+  border-color: #ff69b4;
+}
+
+.tile[data-icon="crown"] {
+  background: rgba(255, 215, 0, 0.1);
+  border-color: #ffd700;
+}
+
+.tile[data-icon="door-open"] {
+  background: rgba(139, 69, 19, 0.1);
+  border-color: #8b4513;
+}
+
+.tile[data-icon="lock"] {
+  background: rgba(128, 128, 128, 0.1);
+  border-color: #808080;
+}
+
+/* =============================
+=         Grid Overlay         
+============================= */
+
+.tile-grid.show-grid {
+  background-image: 
+    linear-gradient(rgba(74, 144, 226, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 144, 226, 0.1) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+/* =============================
+=         Minimap Overrides    
+============================= */
+
+.minimap-display .tile-grid {
+  gap: 12px;
+  padding: 12px;
+}
+
+.minimap-display .player-indicator {
+  width: 16px;
+  height: 16px;
+  animation: none;
+}
+
+.minimap-display .tile-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 1em;
+}
+
+.minimap-display .tile::before,
+.minimap-display .tile::after {
+  opacity: 0.6;
+}
+
+.minimap-display .has-north::before,
+.minimap-display .has-south::before {
+  width: 2px;
+  height: 8px;
+  top: -8px;
+}
+
+.minimap-display .has-south::after {
+  bottom: -8px;
+}
+
+.minimap-display .has-east::after,
+.minimap-display .has-west::after {
+  width: 8px;
+  height: 2px;
+}
+
+.minimap-display .has-east::after {
+  right: -8px;
+}
+
+.minimap-display .has-west::before {
+  left: -8px;
+}
+
+/* =============================
+=         Responsive Design    
+============================= */
+
 @media (max-width: 768px) {
-  .tile.full-map-tile {
+  #sidebar-minimap-container {
+    display: none;
+  }
+  
+  #mobile-minimap-overlay {
+    display: block;
+  }
+  
+  #mobile-movement-controls {
+    display: block;
+  }
+  
+  .full-map-grid {
+    grid-template-columns: repeat(9, 30px);
+    grid-template-rows: repeat(7, 30px);
+    gap: 1px;
+    padding: 10px;
+  }
+  
+  .full-map-tile {
+    width: 30px;
+    height: 30px;
     min-height: 35px;
     min-width: 35px;
   }
   
-  .full-map-tile .tile-icon {
+  .tile-icon {
+    width: 12px;
+    height: 12px;
     font-size: 1em;
+  }
+  
+  .player-indicator {
+    width: 14px;
+    height: 14px;
   }
   
   .legend-items {
@@ -428,7 +920,60 @@
   }
 }
 
-/* Accessibility */
+@media (max-width: 768px) and (orientation: portrait) {
+  #mobile-minimap-overlay {
+    top: 60px;
+    right: 10px;
+    width: 140px;
+    height: 110px;
+  }
+  
+  #mobile-minimap-overlay .minimap-display {
+    height: 80px;
+  }
+  
+  #mobile-movement-controls {
+    bottom: 80px;
+    right: 15px;
+    width: 100px;
+    height: 100px;
+  }
+}
+
+@media (max-width: 480px) {
+  .full-map-grid {
+    grid-template-columns: repeat(9, 25px);
+    grid-template-rows: repeat(7, 25px);
+  }
+  
+  .full-map-tile {
+    width: 25px;
+    height: 25px;
+  }
+  
+  .tile-icon {
+    width: 10px;
+    height: 10px;
+  }
+  
+  .player-indicator {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+/* =============================
+=         Collapsed Sidebar    
+============================= */
+
+#custom-sidebar.collapsed #sidebar-minimap-container {
+  display: none;
+}
+
+/* =============================
+=         Accessibility        
+============================= */
+
 .tile:focus {
   outline: 2px solid #4a90e2;
   outline-offset: 2px;
@@ -463,5 +1008,9 @@
   
   .tile-clickable:hover {
     transform: none;
+  }
+  
+  .player-indicator {
+    animation: none;
   }
 }

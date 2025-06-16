@@ -71,12 +71,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function initializeApp() {
     setupEventListeners();
-    showSetupModal();
     
     // Check for saved theme preference
     const savedTheme = localStorage.getItem('twine-map-editor-theme');
     if (savedTheme === 'dark') {
         toggleTheme();
+    }
+    
+    // Only show setup modal if no autosave was restored
+    // This check happens after setupEventListeners() which includes setupAutoSave()
+    if (mapData.nodes.size === 0) {
+        showSetupModal();
     }
 }
 
@@ -1395,8 +1400,16 @@ function loadFromLocalStorage() {
                 nodeMemory = new Map(saveData.nodeMemory);
                 
                 document.getElementById('mapTitle').textContent = `Twine Map Editor - ${mapData.name}`;
-                generateGrid();
                 hideSetupModal();
+                generateGrid();
+                
+                // IMPORTANT: Update all transition connectors after grid generation
+                // This ensures that the visual styles match the loaded transition data
+                for (let row = 0; row < mapData.height; row++) {
+                    for (let col = 0; col < mapData.width; col++) {
+                        updateTransitionConnectors(col, row);
+                    }
+                }
             }
         }
     } catch (error) {
