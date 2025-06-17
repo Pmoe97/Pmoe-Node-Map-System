@@ -2172,6 +2172,842 @@ header h1 {
     line-height: 1.6;
 }
 
+/* Professional Passage Editor Styles */
+.pro-passage-editor {
+    max-width: 1700px;
+    width: 95vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.editor-title-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.editor-subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-weight: normal;
+}
+
+.editor-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.view-toggle-group {
+    display: flex;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: var(--bg-secondary);
+}
+
+.view-toggle {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    border-right: 1px solid var(--border-color);
+}
+
+.view-toggle:last-child {
+    border-right: none;
+}
+
+.view-toggle:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.view-toggle.active {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.view-toggle i {
+    width: 16px;
+    height: 16px;
+}
+
+/* WYSIWYG Toolbar */
+.wysiwyg-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.toolbar-section {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: 4px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+}
+
+.toolbar-btn {
+    padding: 0.5rem;
+    border: none;
+    background: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    min-width: 32px;
+    height: 32px;
+    justify-content: center;
+}
+
+.toolbar-btn:hover {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.toolbar-btn.active {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.toolbar-btn i {
+    width: 16px;
+    height: 16px;
+}
+
+.macro-btn {
+    background-color: rgba(40, 167, 69, 0.1);
+    border: 1px solid var(--success-color);
+    color: var(--success-color);
+}
+
+.macro-btn:hover {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.toolbar-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.toolbar-label:hover {
+    background-color: var(--bg-tertiary);
+}
+
+.toolbar-label input[type="checkbox"] {
+    margin: 0;
+}
+
+.passage-selector {
+    margin-left: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    min-width: 150px;
+    cursor: pointer;
+}
+
+.passage-selector:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.passage-selector option {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+/* Editor Views */
+.passage-editor-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    position: relative;
+}
+
+.editor-view {
+    display: none;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    padding: 1rem;
+}
+
+.editor-view.active {
+    display: flex;
+}
+
+/* Visual Editor */
+.visual-editor-container {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 1rem;
+    height: 100%;
+    min-height: 500px;
+}
+
+.visual-editor {
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1rem;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+    overflow-y: auto;
+    min-height: 400px;
+    outline: none;
+    position: relative;
+}
+
+.visual-editor:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.visual-editor[placeholder]:empty::before {
+    content: attr(placeholder);
+    color: var(--text-secondary);
+    font-style: italic;
+    pointer-events: none;
+}
+
+.visual-editor .interactive-span {
+    background-color: rgba(0, 123, 255, 0.1);
+    border: 1px dashed var(--accent-color);
+    border-radius: 3px;
+    padding: 0.1rem 0.25rem;
+    cursor: pointer;
+    position: relative;
+}
+
+.visual-editor .interactive-span:hover {
+    background-color: rgba(0, 123, 255, 0.2);
+}
+
+.visual-editor .interactive-span::after {
+    content: attr(data-macro-type);
+    position: absolute;
+    top: -20px;
+    left: 0;
+    background-color: var(--accent-color);
+    color: white;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+.visual-editor .interactive-span:hover::after {
+    opacity: 1;
+}
+
+.visual-editor .named-span {
+    border: 1px solid var(--warning-color);
+    background-color: rgba(255, 193, 7, 0.1);
+    border-radius: 3px;
+    position: relative;
+}
+
+.visual-editor .named-span::before {
+    content: "#" attr(id);
+    position: absolute;
+    top: -18px;
+    left: 0;
+    background-color: var(--warning-color);
+    color: #212529;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+.visual-editor .named-span:hover::before {
+    opacity: 1;
+}
+
+/* Span Manager */
+.span-manager {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.span-manager h4 {
+    margin: 0 0 1rem 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.span-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.span-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.span-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.span-id {
+    font-weight: bold;
+    color: var(--accent-color);
+}
+
+.span-type {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.span-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.span-action-btn {
+    padding: 0.25rem;
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.2s;
+}
+
+.span-action-btn:hover {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+/* Code Editor */
+.code-editor-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 500px;
+}
+
+.code-editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.code-editor-header h4 {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.code-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.code-action-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.code-action-btn:hover {
+    background-color: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+}
+
+.code-editor {
+    flex: 1;
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1rem;
+    font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+    font-size: 0.9rem;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    resize: none;
+    outline: none;
+    line-height: 1.5;
+    tab-size: 2;
+}
+
+.code-editor:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.code-status {
+    margin-top: 0.5rem;
+}
+
+.validation-status {
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    display: none;
+}
+
+.validation-status.success {
+    background-color: rgba(40, 167, 69, 0.1);
+    color: var(--success-color);
+    border: 1px solid var(--success-color);
+    display: block;
+}
+
+.validation-status.error {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+    display: block;
+}
+
+.validation-status.warning {
+    background-color: rgba(255, 193, 7, 0.1);
+    color: var(--warning-color);
+    border: 1px solid var(--warning-color);
+    display: block;
+}
+
+/* Preview Container */
+.preview-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 500px;
+}
+
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.preview-header h4 {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.preview-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.preview-btn {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.preview-btn:hover {
+    background-color: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+}
+
+.preview-btn i {
+    width: 16px;
+    height: 16px;
+}
+
+.player-preview {
+    flex: 1;
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1rem;
+    background-color: var(--bg-primary);
+    overflow-y: auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+}
+
+.preview-placeholder {
+    color: var(--text-secondary);
+    font-style: italic;
+    text-align: center;
+    padding: 2rem;
+}
+
+/* Modal Footer Enhancements */
+.pro-passage-editor .modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1rem;
+    margin-top: 1rem;
+}
+
+.editor-status {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.status-indicator {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background-color: var(--success-color);
+    color: white;
+}
+
+.status-indicator.error {
+    background-color: var(--danger-color);
+}
+
+.status-indicator.warning {
+    background-color: var(--warning-color);
+    color: #212529;
+}
+
+.word-count {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.editor-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.save-btn, .cancel-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    border: 1px solid;
+}
+
+.save-btn {
+    background-color: var(--success-color);
+    color: white;
+    border-color: var(--success-color);
+}
+
+.save-btn:hover {
+    background-color: #218838;
+    border-color: #218838;
+}
+
+.cancel-btn {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+.cancel-btn:hover {
+    background-color: var(--bg-tertiary);
+}
+
+.save-btn i, .cancel-btn i {
+    width: 16px;
+    height: 16px;
+}
+
+/* Macro Builder Modals */
+.macro-builder {
+    max-width: 600px;
+    width: 90%;
+}
+
+.macro-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.macro-form .form-group {
+    margin-bottom: 0;
+}
+
+.macro-form textarea {
+    font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.75rem;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    resize: vertical;
+}
+
+.macro-form textarea:focus {
+    border-color: var(--accent-color);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+/* Beginner Mode Tooltips */
+.beginner-tooltip {
+    position: absolute;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--accent-color);
+    border-radius: 6px;
+    padding: 0.75rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    max-width: 300px;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: var(--text-primary);
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all 0.2s;
+    pointer-events: none;
+}
+
+.beginner-tooltip.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.beginner-tooltip::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 20px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid var(--accent-color);
+}
+
+.beginner-tooltip h5 {
+    margin: 0 0 0.5rem 0;
+    color: var(--accent-color);
+    font-size: 0.9rem;
+}
+
+.beginner-tooltip p {
+    margin: 0;
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .visual-editor {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .code-editor {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .player-preview {
+    background-color: var(--bg-primary);
+}
+
+[data-theme="dark"] .span-manager {
+    background-color: var(--bg-secondary);
+}
+
+[data-theme="dark"] .beginner-tooltip {
+    background-color: var(--bg-primary);
+    border-color: var(--accent-color);
+}
+
+/* Responsive adjustments for professional passage editor */
+@media (max-width: 1024px) {
+    .pro-passage-editor {
+        width: 98vw;
+        max-height: 95vh;
+    }
+    
+    .visual-editor-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+    }
+    
+    .span-manager {
+        max-height: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    .wysiwyg-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+    
+    .toolbar-section {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .view-toggle-group {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .view-toggle {
+        flex: 1;
+        justify-content: center;
+    }
+    
+    .editor-view {
+        padding: 0.5rem;
+    }
+    
+    .visual-editor-container {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+        min-height: 400px;
+    }
+    
+    .visual-editor {
+        min-height: 300px;
+    }
+    
+    .span-manager {
+        max-height: 150px;
+    }
+    
+    .code-editor-container,
+    .preview-container {
+        min-height: 400px;
+    }
+    
+    .pro-passage-editor .modal-footer {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+    
+    .editor-status {
+        justify-content: center;
+    }
+    
+    .editor-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+    
+    .save-btn, .cancel-btn {
+        flex: 1;
+        justify-content: center;
+    }
+    
+    .macro-builder {
+        width: 95%;
+        margin: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .toolbar-group {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .toolbar-btn {
+        min-width: 40px;
+        height: 40px;
+    }
+    
+    .visual-editor,
+    .code-editor {
+        font-size: 0.9rem;
+        padding: 0.75rem;
+    }
+    
+    .span-manager {
+        padding: 0.75rem;
+    }
+    
+    .editor-actions {
+        flex-direction: column;
+    }
+}
+
 /* Responsive adjustments for passage editor */
 @media (max-width: 768px) {
     .passage-editor {

@@ -3315,7 +3315,18 @@ function updateCellDisplayEnhanced(cell, col, row) {
     updateTransitionConnectors(col, row);
 }
 
-// Passage Text Editor
+// Professional Passage Text Editor System
+let currentPassageEditor = {
+    nodeKey: null,
+    currentView: 'visual',
+    visualContent: '',
+    codeContent: '',
+    isBeginnerMode: true,
+    namedSpans: new Map(),
+    lastSelection: null,
+    isDirty: false
+};
+
 function openPassageTextEditor() {
     if (!currentEditingNode) return;
     
@@ -3324,178 +3335,1038 @@ function openPassageTextEditor() {
     const nodeData = mapData.nodes.get(nodeKey) || {};
     
     currentEditingPassage = nodeKey;
+    currentPassageEditor.nodeKey = nodeKey;
     
-    // Set title
-    document.getElementById('passageEditorTitle').textContent = 
-        `Edit Passage Text - ${nodeData.name || nodeData.passage || `Node (${col},${row})`}`;
+    // Set title and subtitle
+    document.getElementById('passageEditorTitle').textContent = 'Professional Passage Editor';
+    document.getElementById('passageEditorSubtitle').textContent = 
+        `${nodeData.name || nodeData.passage || `Node (${col},${row})`}`;
     
     // Load existing passage text
     const passageData = passageTexts.get(nodeKey) || { main: '', conditions: {} };
-    document.getElementById('mainPassageText').value = passageData.main || '';
+    currentPassageEditor.codeContent = passageData.main || '';
     
-    // Setup tabs and populate conditional passages
-    setupPassageTabs();
-    populateConditionalPassages(nodeData, passageData);
+    // Initialize the editor
+    initializePassageEditor();
     
     // Show modal
     document.getElementById('passageTextModal').classList.remove('hidden');
     
-    // Update preview
-    updatePassagePreview();
+    // Initialize Lucide icons
+    if (window.lucide) {
+        lucide.createIcons();
+    }
 }
 
-function closePassageTextEditor() {
-    document.getElementById('passageTextModal').classList.add('hidden');
-    currentEditingPassage = null;
+function initializePassageEditor() {
+    // Setup view toggles
+    setupViewToggles();
+    
+    // Setup toolbar
+    setupWysiwygToolbar();
+    
+    // Load content into current view
+    loadContentIntoViews();
+    
+    // Setup real-time sync
+    setupViewSynchronization();
+    
+    // Update status
+    updateEditorStatus();
+    
+    // Setup beginner mode
+    setupBeginnerMode();
 }
 
-function savePassageText() {
-    if (!currentEditingPassage) return;
+function setupViewToggles() {
+    const viewToggles = document.querySelectorAll('.view-toggle');
+    const editorViews = document.querySelectorAll('.editor-view');
     
-    const mainText = document.getElementById('mainPassageText').value;
-    
-    // Collect conditional passage texts
-    const conditionalTexts = {};
-    const conditionalTextareas = document.querySelectorAll('[id^="conditionalText_"]');
-    
-    conditionalTextareas.forEach(textarea => {
-        const index = textarea.id.split('_')[1];
-        const conditionEditor = textarea.closest('.conditional-passage-editor');
-        const passageName = conditionEditor.querySelector('h4').textContent.replace('Conditional Passage: ', '');
-        conditionalTexts[passageName] = textarea.value;
-    });
-    
-    // Save to passage texts
-    passageTexts.set(currentEditingPassage, {
-        main: mainText,
-        conditions: conditionalTexts
-    });
-    
-    closePassageTextEditor();
-    alert('Passage text saved successfully!');
-}
-
-function setupPassageTabs() {
-    const tabs = document.querySelectorAll('.passage-tab');
-    const panels = document.querySelectorAll('.tab-panel');
-    
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            // Remove active from all tabs and panels
-            tabs.forEach(t => t.classList.remove('active'));
-            panels.forEach(p => p.classList.remove('active'));
+    viewToggles.forEach(toggle => {
+        toggle.addEventListener('click', () => {
+            const targetView = toggle.dataset.view;
             
-            // Add active to clicked tab and corresponding panel
-            tab.classList.add('active');
-            const targetPanel = document.getElementById(`${tab.dataset.tab}PassageTab`);
-            if (targetPanel) {
-                targetPanel.classList.add('active');
-            }
+            // Save current view content before switching
+            saveCurrentViewContent();
+            
+            // Update active states
+            viewToggles.forEach(t => t.classList.remove('active'));
+            editorViews.forEach(v => v.classList.remove('active'));
+            
+            toggle.classList.add('active');
+            document.getElementById(`${targetView}View`).classList.add('active');
+            
+            // Update current view
+            currentPassageEditor.currentView = targetView;
+            
+            // Load content into new view
+            loadContentIntoCurrentView();
+            
+            // Update toolbar visibility
+            updateToolbarVisibility();
         });
     });
-    
-    // Setup real-time preview
-    document.getElementById('mainPassageText').addEventListener('input', updatePassagePreview);
 }
 
-function updatePassagePreview() {
-    const text = document.getElementById('mainPassageText').value;
-    const preview = document.getElementById('mainPassagePreview');
+function setupWysiwygToolbar() {
+    // Passage selector
+    document.getElementById('passageSelector').addEventListener('change', handlePassageSelection);
     
-    // Simple markdown-like rendering
-    let html = text
+    // Populate passage selector when modal opens
+    populatePassageSelector();
+    
+    // Basic formatting buttons
+    document.getElementById('boldBtn').addEventListener('click', () => applyFormatting('bold'));
+    document.getElementById('italicBtn').addEventListener('click', () => applyFormatting('italic'));
+    document.getElementById('underlineBtn').addEventListener('click', () => applyFormatting('underline'));
+    
+    // Macro buttons
+    document.getElementById('replaceBtn').addEventListener('click', () => openMacroBuilder('replace'));
+    document.getElementById('appendBtn').addEventListener('click', () => openMacroBuilder('append'));
+    document.getElementById('clearBtn').addEventListener('click', () => openMacroBuilder('clear'));
+    
+    // Span management
+    document.getElementById('wrapSpanBtn').addEventListener('click', () => openMacroBuilder('span'));
+    document.getElementById('targetPickerBtn').addEventListener('click', () => openTargetPicker());
+    
+    // Advanced features
+    document.getElementById('conditionalBtn').addEventListener('click', () => openMacroBuilder('conditional'));
+    document.getElementById('variableBtn').addEventListener('click', () => openMacroBuilder('variable'));
+    document.getElementById('audioBtn').addEventListener('click', () => openMacroBuilder('audio'));
+    
+    // Tools
+    document.getElementById('timelineBtn').addEventListener('click', () => openTimelineTool());
+    document.getElementById('validateBtn').addEventListener('click', () => validatePassage());
+    
+    // Beginner mode toggle
+    document.getElementById('beginnerMode').addEventListener('change', (e) => {
+        currentPassageEditor.isBeginnerMode = e.target.checked;
+        updateBeginnerMode();
+    });
+    
+    // Code view actions
+    document.getElementById('formatCodeBtn').addEventListener('click', () => formatCode());
+    document.getElementById('syncFromCodeBtn').addEventListener('click', () => syncFromCodeToVisual());
+    
+    // Preview actions
+    document.getElementById('refreshPreviewBtn').addEventListener('click', () => refreshPreview());
+    document.getElementById('fullscreenPreviewBtn').addEventListener('click', () => toggleFullscreenPreview());
+}
+
+function loadContentIntoViews() {
+    // Load into visual editor
+    const visualEditor = document.getElementById('visualEditor');
+    visualEditor.innerHTML = convertCodeToVisual(currentPassageEditor.codeContent);
+    
+    // Load into code editor
+    const codeEditor = document.getElementById('codeEditor');
+    codeEditor.value = currentPassageEditor.codeContent;
+    
+    // Update preview
+    refreshPreview();
+    
+    // Update span manager
+    updateSpanManager();
+}
+
+function loadContentIntoCurrentView() {
+    switch (currentPassageEditor.currentView) {
+        case 'visual':
+            const visualEditor = document.getElementById('visualEditor');
+            visualEditor.innerHTML = convertCodeToVisual(currentPassageEditor.codeContent);
+            updateSpanManager();
+            break;
+        case 'code':
+            const codeEditor = document.getElementById('codeEditor');
+            codeEditor.value = currentPassageEditor.codeContent;
+            break;
+        case 'preview':
+            refreshPreview();
+            break;
+    }
+}
+
+function saveCurrentViewContent() {
+    switch (currentPassageEditor.currentView) {
+        case 'visual':
+            const visualEditor = document.getElementById('visualEditor');
+            currentPassageEditor.codeContent = convertVisualToCode(visualEditor.innerHTML);
+            break;
+        case 'code':
+            const codeEditor = document.getElementById('codeEditor');
+            currentPassageEditor.codeContent = codeEditor.value;
+            break;
+    }
+    currentPassageEditor.isDirty = true;
+    updateEditorStatus();
+}
+
+function setupViewSynchronization() {
+    // Visual editor changes
+    const visualEditor = document.getElementById('visualEditor');
+    visualEditor.addEventListener('input', () => {
+        saveCurrentViewContent();
+        updateWordCount();
+    });
+    
+    visualEditor.addEventListener('keydown', handleVisualEditorKeydown);
+    visualEditor.addEventListener('mouseup', handleVisualEditorSelection);
+    
+    // Code editor changes
+    const codeEditor = document.getElementById('codeEditor');
+    codeEditor.addEventListener('input', () => {
+        saveCurrentViewContent();
+        validateCodeSyntax();
+        updateWordCount();
+    });
+}
+
+function handleVisualEditorKeydown(e) {
+    // Handle keyboard shortcuts
+    if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+            case 'b':
+                e.preventDefault();
+                applyFormatting('bold');
+                break;
+            case 'i':
+                e.preventDefault();
+                applyFormatting('italic');
+                break;
+            case 'u':
+                e.preventDefault();
+                applyFormatting('underline');
+                break;
+        }
+    }
+}
+
+function handleVisualEditorSelection() {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+        currentPassageEditor.lastSelection = selection.getRangeAt(0).cloneRange();
+    }
+}
+
+function applyFormatting(type) {
+    if (currentPassageEditor.currentView !== 'visual') return;
+    
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) return;
+    
+    const range = selection.getRangeAt(0);
+    if (range.collapsed) return;
+    
+    const selectedText = range.toString();
+    let formattedText = '';
+    
+    switch (type) {
+        case 'bold':
+            formattedText = `<strong>${selectedText}</strong>`;
+            break;
+        case 'italic':
+            formattedText = `<em>${selectedText}</em>`;
+            break;
+        case 'underline':
+            formattedText = `<u>${selectedText}</u>`;
+            break;
+    }
+    
+    if (formattedText) {
+        range.deleteContents();
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = formattedText;
+        const fragment = document.createDocumentFragment();
+        while (tempDiv.firstChild) {
+            fragment.appendChild(tempDiv.firstChild);
+        }
+        range.insertNode(fragment);
+        
+        saveCurrentViewContent();
+    }
+}
+
+function openMacroBuilder(type) {
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+    
+    switch (type) {
+        case 'replace':
+            openReplaceMacroModal(selectedText);
+            break;
+        case 'append':
+            openAppendMacroModal(selectedText);
+            break;
+        case 'clear':
+            openClearMacroModal(selectedText);
+            break;
+        case 'span':
+            openSpanWrapModal(selectedText);
+            break;
+        case 'conditional':
+            openConditionalModal();
+            break;
+        case 'variable':
+            openVariableModal();
+            break;
+        case 'audio':
+            openAudioModal();
+            break;
+    }
+}
+
+function openReplaceMacroModal(selectedText) {
+    document.getElementById('replaceSelection').value = selectedText;
+    document.getElementById('replaceTargetSpan').value = '';
+    document.getElementById('replaceContent').value = '';
+    document.getElementById('replaceMacroModal').classList.remove('hidden');
+}
+
+function openAppendMacroModal(selectedText) {
+    document.getElementById('appendSelection').value = selectedText;
+    document.getElementById('appendTargetSpan').value = '';
+    document.getElementById('appendContent').value = '';
+    document.getElementById('appendMacroModal').classList.remove('hidden');
+}
+
+function openSpanWrapModal(selectedText) {
+    document.getElementById('spanWrapSelection').value = selectedText;
+    document.getElementById('spanWrapId').value = '';
+    document.getElementById('spanWrapClass').value = '';
+    document.getElementById('spanWrapModal').classList.remove('hidden');
+}
+
+function openConditionalModal() {
+    document.getElementById('conditionalType').value = 'if';
+    document.getElementById('conditionalVariable').value = '';
+    document.getElementById('conditionalTrueContent').value = '';
+    document.getElementById('conditionalFalseContent').value = '';
+    updateConditionalModalFields();
+    document.getElementById('conditionalModal').classList.remove('hidden');
+}
+
+function openAudioModal() {
+    document.getElementById('audioType').value = 'sfx';
+    document.getElementById('audioFile').value = '';
+    document.getElementById('audioAction').value = 'play';
+    document.getElementById('audioVolume').value = '0.7';
+    document.getElementById('audioModal').classList.remove('hidden');
+}
+
+function closeMacroModal(modalId) {
+    document.getElementById(modalId).classList.add('hidden');
+}
+
+function buildReplaceMacro() {
+    const selection = document.getElementById('replaceSelection').value;
+    const targetSpan = document.getElementById('replaceTargetSpan').value;
+    const content = document.getElementById('replaceContent').value;
+    
+    if (!selection || !targetSpan || !content) {
+        alert('Please fill in all fields');
+        return;
+    }
+    
+    const macro = `<span id="${targetSpan}">${selection}<<link "${selection}">><<replace "#${targetSpan}">>${content}<</replace>><</link>></span>`;
+    insertMacroIntoEditor(macro);
+    closeMacroModal('replaceMacroModal');
+}
+
+function buildAppendMacro() {
+    const selection = document.getElementById('appendSelection').value;
+    const targetSpan = document.getElementById('appendTargetSpan').value;
+    const content = document.getElementById('appendContent').value;
+    
+    if (!selection || !targetSpan || !content) {
+        alert('Please fill in all fields');
+        return;
+    }
+    
+    const macro = `<<link "${selection}">><<append "#${targetSpan}">>${content}<</append>><</link>>`;
+    insertMacroIntoEditor(macro);
+    closeMacroModal('appendMacroModal');
+}
+
+function buildSpanWrap() {
+    const selection = document.getElementById('spanWrapSelection').value;
+    const spanId = document.getElementById('spanWrapId').value;
+    const spanClass = document.getElementById('spanWrapClass').value;
+    
+    if (!selection || !spanId) {
+        alert('Please provide selected text and span ID');
+        return;
+    }
+    
+    const classAttr = spanClass ? ` class="${spanClass}"` : '';
+    const macro = `<span id="${spanId}"${classAttr}>${selection}</span>`;
+    insertMacroIntoEditor(macro);
+    
+    // Add to span manager
+    currentPassageEditor.namedSpans.set(spanId, {
+        id: spanId,
+        class: spanClass,
+        type: 'named-span'
+    });
+    
+    updateSpanManager();
+    closeMacroModal('spanWrapModal');
+}
+
+function buildConditional() {
+    const type = document.getElementById('conditionalType').value;
+    const variable = document.getElementById('conditionalVariable').value;
+    const trueContent = document.getElementById('conditionalTrueContent').value;
+    const falseContent = document.getElementById('conditionalFalseContent').value;
+    
+    if (!variable || !trueContent) {
+        alert('Please provide variable and true content');
+        return;
+    }
+    
+    let macro = `<<if ${variable}>>${trueContent}`;
+    
+    if (type === 'if-else' && falseContent) {
+        macro += `<<else>>${falseContent}`;
+    }
+    
+    macro += `<</if>>`;
+    
+    insertMacroIntoEditor(macro);
+    closeMacroModal('conditionalModal');
+}
+
+function buildAudioMacro() {
+    const type = document.getElementById('audioType').value;
+    const file = document.getElementById('audioFile').value;
+    const action = document.getElementById('audioAction').value;
+    const volume = document.getElementById('audioVolume').value;
+    
+    if (!file) {
+        alert('Please provide audio file path');
+        return;
+    }
+    
+    let macro = `<<audio "${file}" ${action}`;
+    if (volume !== '0.7') {
+        macro += ` volume ${volume}`;
+    }
+    macro += `>>`;
+    
+    insertMacroIntoEditor(macro);
+    closeMacroModal('audioModal');
+}
+
+function insertMacroIntoEditor(macro) {
+    if (currentPassageEditor.currentView === 'visual') {
+        const visualEditor = document.getElementById('visualEditor');
+        
+        if (currentPassageEditor.lastSelection) {
+            const range = currentPassageEditor.lastSelection;
+            range.deleteContents();
+            
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = macro;
+            const fragment = document.createDocumentFragment();
+            while (tempDiv.firstChild) {
+                fragment.appendChild(tempDiv.firstChild);
+            }
+            range.insertNode(fragment);
+        } else {
+            visualEditor.innerHTML += macro;
+        }
+        
+        saveCurrentViewContent();
+    } else if (currentPassageEditor.currentView === 'code') {
+        const codeEditor = document.getElementById('codeEditor');
+        const cursorPos = codeEditor.selectionStart;
+        const textBefore = codeEditor.value.substring(0, cursorPos);
+        const textAfter = codeEditor.value.substring(codeEditor.selectionEnd);
+        
+        codeEditor.value = textBefore + macro + textAfter;
+        codeEditor.selectionStart = codeEditor.selectionEnd = cursorPos + macro.length;
+        
+        saveCurrentViewContent();
+    }
+}
+
+function convertCodeToVisual(code) {
+    // Convert Twine/SugarCube code to visual representation
+    let visual = code;
+    
+    // Convert basic formatting
+    visual = visual.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    visual = visual.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Convert passage links
+    visual = visual.replace(/\[\[(.*?)\]\]/g, '<a href="#" class="passage-link">$1</a>');
+    
+    // Convert macros to visual representations
+    visual = visual.replace(/<<link\s+"([^"]+)">>(.*?)<<\/link>>/gs, 
+        '<span class="interactive-span" data-macro-type="link">$1</span>');
+    
+    visual = visual.replace(/<<replace\s+"#([^"]+)">>(.*?)<<\/replace>>/gs, 
+        '<span class="interactive-span" data-macro-type="replace" data-target="$1">Replace: $1</span>');
+    
+    visual = visual.replace(/<<append\s+"#([^"]+)">>(.*?)<<\/append>>/gs, 
+        '<span class="interactive-span" data-macro-type="append" data-target="$1">Append: $1</span>');
+    
+    visual = visual.replace(/<<if\s+(.*?)>>(.*?)<<\/if>>/gs, 
+        '<div class="interactive-span" data-macro-type="conditional">If: $1<br>$2</div>');
+    
+    visual = visual.replace(/<<set\s+(.*?)>>/g, 
+        '<span class="interactive-span" data-macro-type="variable">Set: $1</span>');
+    
+    visual = visual.replace(/<<audio\s+"([^"]+)"\s+(\w+).*?>>/g, 
+        '<span class="interactive-span" data-macro-type="audio">Audio: $1 ($2)</span>');
+    
+    // Convert named spans
+    visual = visual.replace(/<span\s+id="([^"]+)"([^>]*)>(.*?)<\/span>/gs, 
+        '<span id="$1" class="named-span"$2>$3</span>');
+    
+    // Convert line breaks
+    visual = visual.replace(/\n/g, '<br>');
+    
+    return visual;
+}
+
+function convertVisualToCode(visual) {
+    // Convert visual representation back to Twine/SugarCube code
+    let code = visual;
+    
+    // Remove visual-only classes and attributes
+    code = code.replace(/\s*class="[^"]*interactive-span[^"]*"/g, '');
+    code = code.replace(/\s*class="[^"]*named-span[^"]*"/g, '');
+    code = code.replace(/\s*data-macro-type="[^"]*"/g, '');
+    code = code.replace(/\s*data-target="[^"]*"/g, '');
+    
+    // Convert back to text formatting
+    code = code.replace(/<strong>(.*?)<\/strong>/g, '**$1**');
+    code = code.replace(/<em>(.*?)<\/em>/g, '*$1*');
+    code = code.replace(/<u>(.*?)<\/u>/g, '$1'); // Underline not supported in Twine
+    
+    // Convert passage links
+    code = code.replace(/<a[^>]*class="passage-link"[^>]*>(.*?)<\/a>/g, '[[$1]]');
+    
+    // Convert line breaks
+    code = code.replace(/<br\s*\/?>/g, '\n');
+    
+    // Clean up extra whitespace
+    code = code.replace(/\s+/g, ' ').trim();
+    
+    return code;
+}
+
+function updateSpanManager() {
+    const spanList = document.getElementById('spanList');
+    spanList.innerHTML = '';
+    
+    // Extract spans from current content
+    const visualEditor = document.getElementById('visualEditor');
+    const spans = visualEditor.querySelectorAll('[id]');
+    
+    currentPassageEditor.namedSpans.clear();
+    
+    spans.forEach(span => {
+        const id = span.id;
+        const type = span.classList.contains('interactive-span') ? 'interactive' : 'named';
+        
+        currentPassageEditor.namedSpans.set(id, {
+            id: id,
+            type: type,
+            element: span
+        });
+        
+        const spanItem = document.createElement('div');
+        spanItem.className = 'span-item';
+        spanItem.innerHTML = `
+            <div class="span-item-info">
+                <div class="span-id">${id}</div>
+                <div class="span-type">${type}</div>
+            </div>
+            <div class="span-actions">
+                <button class="span-action-btn" onclick="highlightSpan('${id}')" title="Highlight">
+                    <i data-lucide="eye"></i>
+                </button>
+                <button class="span-action-btn" onclick="editSpan('${id}')" title="Edit">
+                    <i data-lucide="edit"></i>
+                </button>
+                <button class="span-action-btn" onclick="deleteSpan('${id}')" title="Delete">
+                    <i data-lucide="trash-2"></i>
+                </button>
+            </div>
+        `;
+        
+        spanList.appendChild(spanItem);
+    });
+    
+    // Re-render Lucide icons
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+}
+
+function highlightSpan(spanId) {
+    const span = document.getElementById(spanId);
+    if (span) {
+        span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        span.style.outline = '3px solid var(--accent-color)';
+        setTimeout(() => {
+            span.style.outline = '';
+        }, 2000);
+    }
+}
+
+function editSpan(spanId) {
+    // Open appropriate modal based on span type
+    const spanData = currentPassageEditor.namedSpans.get(spanId);
+    if (spanData && spanData.element) {
+        const text = spanData.element.textContent;
+        document.getElementById('spanWrapSelection').value = text;
+        document.getElementById('spanWrapId').value = spanId;
+        document.getElementById('spanWrapClass').value = spanData.element.className || '';
+        document.getElementById('spanWrapModal').classList.remove('hidden');
+    }
+}
+
+function deleteSpan(spanId) {
+    if (confirm(`Delete span "${spanId}"?`)) {
+        const span = document.getElementById(spanId);
+        if (span) {
+            // Replace span with its text content
+            span.outerHTML = span.textContent;
+            saveCurrentViewContent();
+            updateSpanManager();
+        }
+    }
+}
+
+function refreshPreview() {
+    const preview = document.getElementById('playerPreview');
+    const content = currentPassageEditor.codeContent;
+    
+    if (!content.trim()) {
+        preview.innerHTML = '<div class="preview-placeholder">Preview will appear here when you add content...</div>';
+        return;
+    }
+    
+    // Simple preview rendering
+    let html = content
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
         .replace(/^# (.*$)/gm, '<h1>$1</h1>')
         .replace(/^## (.*$)/gm, '<h2>$1</h2>')
         .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-        .replace(/^- (.*$)/gm, '<li>$1</li>')
-        .replace(/\[\[(.*?)\]\]/g, '<span style="color: var(--accent-color); font-weight: bold;">→ $1</span>')
-        .replace(/<<(.*?)>>/g, '<span style="color: var(--warning-color); font-style: italic;">&lt;&lt;$1&gt;&gt;</span>')
+        .replace(/\[\[(.*?)\]\]/g, '<a href="#" class="passage-link">$1</a>')
+        .replace(/<<link\s+"([^"]+)">>(.*?)<<\/link>>/gs, '<button class="twine-link">$1</button>')
+        .replace(/<<replace\s+"#([^"]+)">>(.*?)<<\/replace>>/gs, '<span class="twine-replace">Replace: $1</span>')
+        .replace(/<<append\s+"#([^"]+)">>(.*?)<<\/append>>/gs, '<span class="twine-append">Append: $1</span>')
+        .replace(/<<if\s+(.*?)>>(.*?)<<\/if>>/gs, '<div class="twine-conditional">If $1: $2</div>')
+        .replace(/<<set\s+(.*?)>>/g, '<span class="twine-variable">Set: $1</span>')
+        .replace(/<<audio\s+"([^"]+)"\s+(\w+).*?>>/g, '<span class="twine-audio">♪ $1 ($2)</span>')
         .replace(/\n/g, '<br>');
     
-    // Wrap list items
-    html = html.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
-    
-    preview.innerHTML = html || '<em>Preview will appear here as you type...</em>';
+    preview.innerHTML = html;
 }
 
-function populateConditionalPassages(nodeData, passageData) {
-    const conditionalPassagesList = document.getElementById('conditionalPassagesList');
+function updateToolbarVisibility() {
+    const toolbar = document.getElementById('wysiwygToolbar');
+    if (currentPassageEditor.currentView === 'visual') {
+        toolbar.style.display = 'flex';
+    } else {
+        toolbar.style.display = 'none';
+    }
+}
+
+function updateEditorStatus() {
+    const statusIndicator = document.getElementById('editorStatus');
+    if (currentPassageEditor.isDirty) {
+        statusIndicator.textContent = 'Modified';
+        statusIndicator.className = 'status-indicator warning';
+    } else {
+        statusIndicator.textContent = 'Ready';
+        statusIndicator.className = 'status-indicator';
+    }
+}
+
+function updateWordCount() {
+    const wordCountElement = document.getElementById('wordCount');
+    const content = currentPassageEditor.codeContent;
+    const words = content.trim().split(/\s+/).filter(word => word.length > 0);
+    wordCountElement.textContent = `${words.length} words`;
+}
+
+function setupBeginnerMode() {
+    updateBeginnerMode();
+}
+
+function updateBeginnerMode() {
+    const isBeginnerMode = currentPassageEditor.isBeginnerMode;
+    const toolbarBtns = document.querySelectorAll('.toolbar-btn');
     
-    // Clear existing content
-    conditionalPassagesList.innerHTML = '';
+    if (isBeginnerMode) {
+        // Add tooltips and help for beginners
+        toolbarBtns.forEach(btn => {
+            btn.addEventListener('mouseenter', showBeginnerTooltip);
+            btn.addEventListener('mouseleave', hideBeginnerTooltip);
+        });
+    } else {
+        // Remove beginner tooltips
+        toolbarBtns.forEach(btn => {
+            btn.removeEventListener('mouseenter', showBeginnerTooltip);
+            btn.removeEventListener('mouseleave', hideBeginnerTooltip);
+        });
+        hideBeginnerTooltip();
+    }
+}
+
+function showBeginnerTooltip(e) {
+    if (!currentPassageEditor.isBeginnerMode) return;
     
-    // Check if node has conditions
-    if (!nodeData.conditions || nodeData.conditions.length === 0) {
-        conditionalPassagesList.innerHTML = `
-            <div class="help-text">
-                No conditional passages available. Add node conditions in the sidebar to create conditional passages.
-            </div>
-        `;
+    const btn = e.target.closest('.toolbar-btn');
+    if (!btn) return;
+    
+    const tooltips = {
+        'boldBtn': { title: 'Bold Text', desc: 'Makes selected text bold (**text**)' },
+        'italicBtn': { title: 'Italic Text', desc: 'Makes selected text italic (*text*)' },
+        'replaceBtn': { title: 'Replace Macro', desc: 'Creates interactive text that replaces content when clicked' },
+        'appendBtn': { title: 'Append Macro', desc: 'Creates interactive text that adds content when clicked' },
+        'conditionalBtn': { title: 'Conditional Logic', desc: 'Shows different content based on variables or conditions' },
+        'audioBtn': { title: 'Audio Integration', desc: 'Adds sound effects or music to your passage' }
+    };
+    
+    const tooltipData = tooltips[btn.id];
+    if (!tooltipData) return;
+    
+    const tooltip = document.createElement('div');
+    tooltip.className = 'beginner-tooltip';
+    tooltip.innerHTML = `
+        <h5>${tooltipData.title}</h5>
+        <p>${tooltipData.desc}</p>
+    `;
+    
+    document.body.appendChild(tooltip);
+    
+    const rect = btn.getBoundingClientRect();
+    tooltip.style.left = `${rect.left}px`;
+    tooltip.style.top = `${rect.bottom + 10}px`;
+    
+    setTimeout(() => tooltip.classList.add('show'), 10);
+}
+
+function hideBeginnerTooltip() {
+    const tooltip = document.querySelector('.beginner-tooltip');
+    if (tooltip) {
+        tooltip.remove();
+    }
+}
+
+function validateCodeSyntax() {
+    const codeEditor = document.getElementById('codeEditor');
+    const validation = document.getElementById('codeValidation');
+    const code = codeEditor.value;
+    
+    const errors = [];
+    
+    // Check for unclosed macros
+    const macroPattern = /<<(\w+)(?:\s+[^>]*)?>>(?:(?!<<\/\1>>).)*$/gm;
+    const matches = code.match(macroPattern);
+    if (matches) {
+        errors.push('Unclosed macro detected');
+    }
+    
+    // Check for mismatched brackets
+    const openBrackets = (code.match(/<<(?!\/)[\w\s"'#$=<>!]+>>/g) || []).length;
+    const closeBrackets = (code.match(/<<\/\w+>>/g) || []).length;
+    if (openBrackets !== closeBrackets) {
+        errors.push('Mismatched macro brackets');
+    }
+    
+    if (errors.length > 0) {
+        validation.className = 'validation-status error';
+        validation.textContent = errors.join(', ');
+    } else {
+        validation.className = 'validation-status success';
+        validation.textContent = 'Code syntax is valid';
+    }
+}
+
+function formatCode() {
+    const codeEditor = document.getElementById('codeEditor');
+    let code = codeEditor.value;
+    
+    // Basic formatting for Twine code
+    code = code
+        .replace(/<<(\w+)/g, '\n<<$1')  // New line before macros
+        .replace(/>>/g, '>>\n')         // New line after macros
+        .replace(/\n\s*\n/g, '\n\n')    // Clean up multiple newlines
+        .trim();
+    
+    codeEditor.value = code;
+    saveCurrentViewContent();
+}
+
+function syncFromCodeToVisual() {
+    saveCurrentViewContent();
+    loadContentIntoCurrentView();
+    updateSpanManager();
+}
+
+function openTargetPicker() {
+    // Show available spans for targeting
+    const spans = Array.from(currentPassageEditor.namedSpans.keys());
+    if (spans.length === 0) {
+        alert('No named spans available. Create some spans first using the "Wrap in Span" tool.');
         return;
     }
     
-    // Create editors for each conditional passage
-    nodeData.conditions.forEach((condition, index) => {
-        const conditionPassageName = condition.passage;
-        const conditionText = passageData.conditions[conditionPassageName] || '';
-        
-        const conditionEditor = document.createElement('div');
-        conditionEditor.className = 'conditional-passage-editor';
-        conditionEditor.innerHTML = `
-            <div class="condition-header">
-                <h4>Conditional Passage: ${conditionPassageName}</h4>
-                <div class="condition-description">
-                    <strong>Condition:</strong> ${condition.type} "${condition.name}" ${condition.operator} ${condition.value}
-                    ${condition.description ? `<br><em>${condition.description}</em>` : ''}
-                </div>
-            </div>
-            <div class="condition-editor-content">
-                <div class="form-group">
-                    <label for="conditionalText_${index}">Passage Content:</label>
-                    <textarea id="conditionalText_${index}" rows="8" placeholder="Enter content for this conditional passage...
+    const spanId = prompt('Select a span to target:\n\n' + spans.join('\n'));
+    if (spanId && spans.includes(spanId)) {
+        highlightSpan(spanId);
+    }
+}
 
-This passage will be used when: ${condition.type} '${condition.name}' ${condition.operator} ${condition.value}
+function openTimelineTool() {
+    alert('Timeline tool coming soon! This will allow you to create staged reveals and timed content.');
+}
 
-You can use Twine syntax like:
-[[Link to another passage]]
-<<set $variable = value>>
-<<if $condition>>...<<endif>>">${conditionText}</textarea>
-                </div>
-                <div class="condition-preview">
-                    <label>Preview:</label>
-                    <div id="conditionalPreview_${index}" class="preview-content"></div>
-                </div>
-            </div>
-        `;
-        
-        conditionalPassagesList.appendChild(conditionEditor);
-        
-        // Add real-time preview for this conditional passage
-        const textarea = conditionEditor.querySelector(`#conditionalText_${index}`);
-        const preview = conditionEditor.querySelector(`#conditionalPreview_${index}`);
-        
-        function updateConditionalPreview() {
-            const text = textarea.value;
-            let html = text
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-                .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-                .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-                .replace(/^- (.*$)/gm, '<li>$1</li>')
-                .replace(/\[\[(.*?)\]\]/g, '<span style="color: var(--accent-color); font-weight: bold;">→ $1</span>')
-                .replace(/<<(.*?)>>/g, '<span style="color: var(--warning-color); font-style: italic;">&lt;&lt;$1&gt;&gt;</span>')
-                .replace(/\n/g, '<br>');
-            
-            html = html.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
-            preview.innerHTML = html || '<em>Preview will appear here as you type...</em>';
+function validatePassage() {
+    const errors = [];
+    const warnings = [];
+    
+    // Check for duplicate span IDs
+    const spanIds = new Set();
+    currentPassageEditor.namedSpans.forEach((span, id) => {
+        if (spanIds.has(id)) {
+            errors.push(`Duplicate span ID: ${id}`);
         }
-        
-        textarea.addEventListener('input', updateConditionalPreview);
-        updateConditionalPreview(); // Initial preview
+        spanIds.add(id);
     });
+    
+    // Check for broken references
+    const content = currentPassageEditor.codeContent;
+    const replaceMatches = content.match(/<<replace\s+"#([^"]+)">>/g);
+    const appendMatches = content.match(/<<append\s+"#([^"]+)">>/g);
+    
+    if (replaceMatches) {
+        replaceMatches.forEach(match => {
+            const spanId = match.match(/#([^"]+)/)[1];
+            if (!currentPassageEditor.namedSpans.has(spanId)) {
+                warnings.push(`Replace target "${spanId}" not found`);
+            }
+        });
+    }
+    
+    if (appendMatches) {
+        appendMatches.forEach(match => {
+            const spanId = match.match(/#([^"]+)/)[1];
+            if (!currentPassageEditor.namedSpans.has(spanId)) {
+                warnings.push(`Append target "${spanId}" not found`);
+            }
+        });
+    }
+    
+    let message = 'Validation Results:\n\n';
+    if (errors.length > 0) {
+        message += 'ERRORS:\n' + errors.join('\n') + '\n\n';
+    }
+    if (warnings.length > 0) {
+        message += 'WARNINGS:\n' + warnings.join('\n') + '\n\n';
+    }
+    if (errors.length === 0 && warnings.length === 0) {
+        message += 'No issues found! Your passage looks good.';
+    }
+    
+    alert(message);
+}
+
+function toggleFullscreenPreview() {
+    const previewContainer = document.querySelector('.preview-container');
+    if (previewContainer.classList.contains('fullscreen')) {
+        previewContainer.classList.remove('fullscreen');
+        document.getElementById('fullscreenPreviewBtn').innerHTML = '<i data-lucide="maximize"></i> Fullscreen';
+    } else {
+        previewContainer.classList.add('fullscreen');
+        document.getElementById('fullscreenPreviewBtn').innerHTML = '<i data-lucide="minimize"></i> Exit Fullscreen';
+    }
+    
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+}
+
+function updateConditionalModalFields() {
+    const type = document.getElementById('conditionalType').value;
+    const falseGroup = document.getElementById('conditionalFalseGroup');
+    
+    if (type === 'if-else' || type === 'if-elseif-else') {
+        falseGroup.style.display = 'block';
+    } else {
+        falseGroup.style.display = 'none';
+    }
+}
+
+function openVariableModal() {
+    const variable = prompt('Enter variable assignment (e.g., $player.health = 100):');
+    if (variable) {
+        const macro = `<<set ${variable}>>`;
+        insertMacroIntoEditor(macro);
+    }
+}
+
+function openClearMacroModal(selectedText) {
+    const confirmed = confirm(`Create a clear macro for "${selectedText}"?\n\nThis will make the text disappear when clicked.`);
+    if (confirmed) {
+        const spanId = prompt('Enter span ID to clear:');
+        if (spanId) {
+            const macro = `<<link "${selectedText}">><<replace "#${spanId}">><</replace>><</link>>`;
+            insertMacroIntoEditor(macro);
+        }
+    }
+}
+
+function populatePassageSelector() {
+    if (!currentEditingPassage) return;
+    
+    const selector = document.getElementById('passageSelector');
+    const nodeData = mapData.nodes.get(currentEditingPassage) || {};
+    
+    // Clear existing options
+    selector.innerHTML = '';
+    
+    // Add main passage option
+    const mainOption = document.createElement('option');
+    mainOption.value = 'main';
+    mainOption.textContent = 'Main Passage';
+    selector.appendChild(mainOption);
+    
+    // Add conditional passage options
+    if (nodeData.conditions && nodeData.conditions.length > 0) {
+        nodeData.conditions.forEach((condition, index) => {
+            if (condition.passage) {
+                const option = document.createElement('option');
+                option.value = `condition_${index}`;
+                option.textContent = condition.passage;
+                selector.appendChild(option);
+            }
+        });
+    }
+    
+    // Set default selection to main
+    selector.value = 'main';
+}
+
+function handlePassageSelection(e) {
+    const selectedValue = e.target.value;
+    
+    // Check for unsaved changes
+    if (currentPassageEditor.isDirty) {
+        const shouldSave = confirm('Do you want to save your current passage before proceeding?');
+        if (shouldSave) {
+            saveCurrentPassageContent();
+        }
+    }
+    
+    // Load the selected passage content
+    loadSelectedPassageContent(selectedValue);
+}
+
+function saveCurrentPassageContent() {
+    if (!currentEditingPassage) return;
+    
+    // Save current content
+    saveCurrentViewContent();
+    
+    const passageData = passageTexts.get(currentEditingPassage) || { main: '', conditions: {} };
+    const selector = document.getElementById('passageSelector');
+    const currentSelection = selector.value;
+    
+    if (currentSelection === 'main') {
+        passageData.main = currentPassageEditor.codeContent;
+    } else if (currentSelection.startsWith('condition_')) {
+        const conditionIndex = parseInt(currentSelection.split('_')[1]);
+        const nodeData = mapData.nodes.get(currentEditingPassage) || {};
+        if (nodeData.conditions && nodeData.conditions[conditionIndex]) {
+            const conditionPassage = nodeData.conditions[conditionIndex].passage;
+            passageData.conditions[conditionPassage] = currentPassageEditor.codeContent;
+        }
+    }
+    
+    passageTexts.set(currentEditingPassage, passageData);
+    currentPassageEditor.isDirty = false;
+    updateEditorStatus();
+}
+
+function loadSelectedPassageContent(selectedValue) {
+    if (!currentEditingPassage) return;
+    
+    const passageData = passageTexts.get(currentEditingPassage) || { main: '', conditions: {} };
+    let contentToLoad = '';
+    
+    if (selectedValue === 'main') {
+        contentToLoad = passageData.main || '';
+    } else if (selectedValue.startsWith('condition_')) {
+        const conditionIndex = parseInt(selectedValue.split('_')[1]);
+        const nodeData = mapData.nodes.get(currentEditingPassage) || {};
+        if (nodeData.conditions && nodeData.conditions[conditionIndex]) {
+            const conditionPassage = nodeData.conditions[conditionIndex].passage;
+            contentToLoad = passageData.conditions[conditionPassage] || '';
+        }
+    }
+    
+    // Update editor content
+    currentPassageEditor.codeContent = contentToLoad;
+    currentPassageEditor.isDirty = false;
+    
+    // Reload content into current view
+    loadContentIntoCurrentView();
+    updateEditorStatus();
+    updateWordCount();
+}
+
+function closePassageTextEditor() {
+    // Save current content before closing
+    saveCurrentViewContent();
+    
+    // Save to passage texts
+    if (currentEditingPassage) {
+        passageTexts.set(currentEditingPassage, {
+            main: currentPassageEditor.codeContent,
+            conditions: {} // TODO: Handle conditional passages
+        });
+    }
+    
+    document.getElementById('passageTextModal').classList.add('hidden');
+    currentEditingPassage = null;
+    currentPassageEditor = {
+        nodeKey: null,
+        currentView: 'visual',
+        visualContent: '',
+        codeContent: '',
+        isBeginnerMode: true,
+        namedSpans: new Map(),
+        lastSelection: null,
+        isDirty: false
+    };
+}
+
+function savePassageText() {
+    // Save current content
+    saveCurrentViewContent();
+    
+    // Save to passage texts
+    if (currentEditingPassage) {
+        passageTexts.set(currentEditingPassage, {
+            main: currentPassageEditor.codeContent,
+            conditions: {} // TODO: Handle conditional passages
+        });
+        
+        currentPassageEditor.isDirty = false;
+        updateEditorStatus();
+        
+        alert('Passage text saved successfully!');
+    }
+    
+    closePassageTextEditor();
 }
 
 // Keyboard shortcuts
