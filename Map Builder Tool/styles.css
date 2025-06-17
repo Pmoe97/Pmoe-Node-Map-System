@@ -2397,6 +2397,7 @@ header h1 {
     min-height: 400px;
     outline: none;
     position: relative;
+    max-height: 28rem;
 }
 
 .visual-editor:focus {
@@ -2481,6 +2482,7 @@ header h1 {
     border-radius: 6px;
     padding: 1rem;
     overflow-y: auto;
+    max-height: 28rem;
 }
 
 .span-manager h4 {
