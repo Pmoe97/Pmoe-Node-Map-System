@@ -25,6 +25,7 @@ A local web-based map editor for creating structured map data for Twine 2 / Suga
 - **Passage Generation**: Auto-generate Twine passage stubs for all map content
 - **Memory Persistence**: Form data preserved when navigating between nodes
 - **Visual Feedback**: Enhanced connectors show transition types and conditions
+- **Professional Passage Editor**: WYSIWYG editor with Visual, Code, and Preview modes for writing SugarCube passages
 
 ## Getting Started
 
@@ -63,6 +64,10 @@ Click on the blue connectors between cells to create transitions:
   - **Item**: Player must have a specific item
   - **Quest**: Player must have completed a quest
   - **Variable**: Check a game variable's value
+
+### Editing Passage Text
+
+Each node can open the **Professional Passage Editor**. Use this tool to craft passages with a friendly Visual view, a Preview, and a raw **Code** view that now displays SugarCube macros without HTML escaping.
 
 ### Exporting Maps
 
