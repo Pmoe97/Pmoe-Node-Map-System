@@ -422,6 +422,40 @@
         </div>
     </div>
 
+    <!-- Twine File Upload Modal -->
+    <div id="twineFileModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Complete Map Import</h3>
+            <div class="import-status">
+                <div class="status-item">
+                    <span class="status-icon">✅</span>
+                    <span class="status-text">Map structure loaded successfully</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-icon">📄</span>
+                    <span class="status-text" id="mapImportDetails">Loading map details...</span>
+                </div>
+            </div>
+            <div class="twine-upload-section">
+                <h4>Optional: Upload Passage Content</h4>
+                <p>Would you like to upload a .tw file containing passage content to restore the full story text?</p>
+                <div class="form-actions">
+                    <button id="uploadTwineFile" class="upload-btn">📁 Upload .tw File</button>
+                    <button id="skipTwineFile" class="skip-btn">Skip - Continue Without Passages</button>
+                </div>
+            </div>
+            <div id="twineUploadStatus" class="upload-status hidden">
+                <div class="status-item">
+                    <span class="status-icon" id="twineStatusIcon">⏳</span>
+                    <span class="status-text" id="twineStatusText">Processing .tw file...</span>
+                </div>
+            </div>
+            <div class="form-actions final-actions hidden" id="finalImportActions">
+                <button id="completeTwineImport" class="complete-btn">Complete Import</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Placement Controls (shown during placement mode) -->
     <div id="placementControls" class="placement-controls hidden">
         <h4>Place Map Section</h4>
@@ -444,59 +478,342 @@
         </div>
     </div>
 
-    <!-- Passage Text Editor Modal -->
+    <!-- Professional Passage Editor Modal -->
     <div id="passageTextModal" class="modal hidden">
-        <div class="modal-content passage-editor">
+        <div class="modal-content pro-passage-editor">
             <div class="modal-header">
-                <h3 id="passageEditorTitle">Edit Passage Text</h3>
-                <button id="closePassageEditor" class="close-btn">&times;</button>
+                <div class="editor-title-section">
+                    <h3 id="passageEditorTitle">Professional Passage Editor</h3>
+                    <div class="editor-subtitle" id="passageEditorSubtitle">Node (0,0)</div>
+                </div>
+                <div class="editor-header-controls">
+                    <div class="view-toggle-group">
+                        <button class="view-toggle active" data-view="visual" title="Visual WYSIWYG Editor">
+                            <i data-lucide="eye"></i> Visual
+                        </button>
+                        <button class="view-toggle" data-view="code" title="Raw Twine Code Editor">
+                            <i data-lucide="code"></i> Code
+                        </button>
+                        <button class="view-toggle" data-view="preview" title="Player Preview">
+                            <i data-lucide="play"></i> Preview
+                        </button>
+                    </div>
+                    <button id="closePassageEditor" class="close-btn">&times;</button>
+                </div>
             </div>
+            
+            <!-- WYSIWYG Toolbar -->
+            <div id="wysiwygToolbar" class="wysiwyg-toolbar">
+                <div class="toolbar-section">
+                    <div class="toolbar-group">
+                        <label class="toolbar-label">
+                            <span>Passage:</span>
+                            <select id="passageSelector" class="passage-selector">
+                                <option value="main">Main Passage</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" id="boldBtn" title="Bold (Ctrl+B)">
+                            <i data-lucide="bold"></i>
+                        </button>
+                        <button class="toolbar-btn" id="italicBtn" title="Italic (Ctrl+I)">
+                            <i data-lucide="italic"></i>
+                        </button>
+                        <button class="toolbar-btn" id="underlineBtn" title="Underline (Ctrl+U)">
+                            <i data-lucide="underline"></i>
+                        </button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn macro-btn" id="replaceBtn" title="🔁 Replace Selection">
+                            <i data-lucide="repeat"></i> Replace
+                        </button>
+                        <button class="toolbar-btn macro-btn" id="appendBtn" title="➕ Append After">
+                            <i data-lucide="plus"></i> Append
+                        </button>
+                        <button class="toolbar-btn macro-btn" id="clearBtn" title="🧼 Clear on Click">
+                            <i data-lucide="trash-2"></i> Clear
+                        </button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" id="wrapSpanBtn" title="📦 Wrap in Span">
+                            <i data-lucide="package"></i> Span
+                        </button>
+                        <button class="toolbar-btn" id="targetPickerBtn" title="🎯 Target Picker">
+                            <i data-lucide="target"></i> Target
+                        </button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" id="conditionalBtn" title="🧠 Add Conditional">
+                            <i data-lucide="git-branch"></i> If/Else
+                        </button>
+                        <button class="toolbar-btn" id="variableBtn" title="Set Variable">
+                            <i data-lucide="variable"></i> Variable
+                        </button>
+                        <button class="toolbar-btn" id="audioBtn" title="🔊 Add Audio">
+                            <i data-lucide="volume-2"></i> Audio
+                        </button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" id="timelineBtn" title="🧵 Timeline Tool">
+                            <i data-lucide="clock"></i> Timeline
+                        </button>
+                        <button class="toolbar-btn" id="validateBtn" title="🧪 Validate Passage">
+                            <i data-lucide="check-circle"></i> Validate
+                        </button>
+                    </div>
+                </div>
+                <div class="toolbar-section">
+                    <div class="toolbar-group">
+                        <label class="toolbar-label">
+                            <input type="checkbox" id="beginnerMode" checked> Beginner Mode
+                        </label>
+                    </div>
+                </div>
+            </div>
+
             <div class="passage-editor-content">
-                <div class="passage-tabs">
-                    <button class="passage-tab active" data-tab="main">Main Passage</button>
-                    <button class="passage-tab" data-tab="conditions">Conditional Passages</button>
-                </div>
-                <div class="passage-tab-content">
-                    <div id="mainPassageTab" class="tab-panel active">
-                        <div class="form-group">
-                            <label for="mainPassageText">Main Passage Content:</label>
-                            <textarea id="mainPassageText" rows="15" placeholder="Enter your Twine passage content here...
-
-                            You can use Twine syntax like:
-                            [[Link to another passage]]
-                            <<set $variable = value>>
-                            <<if $condition>>...<<endif>>
-
-                            Markdown is supported for formatting:
-                            **bold text**
-                            *italic text*
-                            # Headers
-                            - Lists"></textarea>
+                <!-- Visual WYSIWYG View -->
+                <div id="visualView" class="editor-view active">
+                    <div class="visual-editor-container">
+                        <div id="visualEditor" class="visual-editor" contenteditable="true" 
+                             placeholder="Start typing your passage content here...">
                         </div>
-                        <div class="markdown-preview">
-                            <label>Preview:</label>
-                            <div id="mainPassagePreview" class="preview-content"></div>
+                        <div class="span-manager">
+                            <h4>Named Spans</h4>
+                            <div id="spanList" class="span-list"></div>
                         </div>
                     </div>
-                    <div id="conditionsPassageTab" class="tab-panel">
-                        <div class="conditional-passages-list">
-                            <p class="help-text">Conditional passages will appear here based on the node conditions you've set up. Each condition will have its own passage text editor.</p>
-                            <div id="conditionalPassagesList"></div>
+                </div>
+
+                <!-- Raw Code View -->
+                <div id="codeView" class="editor-view">
+                    <div class="code-editor-container">
+                        <div class="code-editor-header">
+                            <h4>Raw Twine/SugarCube Code</h4>
+                            <div class="code-actions">
+                                <button id="formatCodeBtn" class="code-action-btn">Format Code</button>
+                                <button id="syncFromCodeBtn" class="code-action-btn">Sync to Visual</button>
+                            </div>
+                        </div>
+                        <textarea id="codeEditor" class="code-editor" placeholder="Raw Twine/SugarCube code will appear here..."></textarea>
+                        <div class="code-status">
+                            <div id="codeValidation" class="validation-status"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Player Preview View -->
+                <div id="previewView" class="editor-view">
+                    <div class="preview-container">
+                        <div class="preview-header">
+                            <h4>Player Preview</h4>
+                            <div class="preview-controls">
+                                <button id="refreshPreviewBtn" class="preview-btn">
+                                    <i data-lucide="refresh-cw"></i> Refresh
+                                </button>
+                                <button id="fullscreenPreviewBtn" class="preview-btn">
+                                    <i data-lucide="maximize"></i> Fullscreen
+                                </button>
+                            </div>
+                        </div>
+                        <div id="playerPreview" class="player-preview">
+                            <div class="preview-placeholder">
+                                Preview will appear here when you add content...
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+
             <div class="modal-footer">
+                <div class="editor-status">
+                    <div id="editorStatus" class="status-indicator">Ready</div>
+                    <div id="wordCount" class="word-count">0 words</div>
+                </div>
                 <div class="editor-actions">
-                    <button id="savePassageText" class="save-btn">Save Passage Text</button>
-                    <button id="cancelPassageText" class="cancel-btn">Cancel</button>
+                    <button id="savePassageText" class="save-btn">
+                        <i data-lucide="save"></i> Save Passage
+                    </button>
+                    <button id="cancelPassageText" class="cancel-btn">
+                        <i data-lucide="x"></i> Cancel
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Hidden file input for importing maps -->
+    <!-- Macro Builder Modals -->
+    <div id="replaceMacroModal" class="modal hidden">
+        <div class="modal-content macro-builder">
+            <div class="modal-header">
+                <h3>🔁 Replace Macro Builder</h3>
+                <button class="close-btn" onclick="closeMacroModal('replaceMacroModal')">&times;</button>
+            </div>
+            <div class="macro-form">
+                <div class="form-group">
+                    <label for="replaceSelection">Selected Text:</label>
+                    <input type="text" id="replaceSelection" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="replaceTargetSpan">Target Span ID:</label>
+                    <input type="text" id="replaceTargetSpan" placeholder="e.g., brothel-reveal">
+                    <small class="form-help">The span that will be replaced when clicked</small>
+                </div>
+                <div class="form-group">
+                    <label for="replaceContent">Replacement Content:</label>
+                    <textarea id="replaceContent" rows="6" placeholder="Enter the content that will replace the target span..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button onclick="buildReplaceMacro()" class="save-btn">Build Macro</button>
+                    <button onclick="closeMacroModal('replaceMacroModal')" class="cancel-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="appendMacroModal" class="modal hidden">
+        <div class="modal-content macro-builder">
+            <div class="modal-header">
+                <h3>➕ Append Macro Builder</h3>
+                <button class="close-btn" onclick="closeMacroModal('appendMacroModal')">&times;</button>
+            </div>
+            <div class="macro-form">
+                <div class="form-group">
+                    <label for="appendSelection">Selected Text:</label>
+                    <input type="text" id="appendSelection" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="appendTargetSpan">Target Span ID:</label>
+                    <input type="text" id="appendTargetSpan" placeholder="e.g., dialogue-area">
+                    <small class="form-help">The span where content will be appended</small>
+                </div>
+                <div class="form-group">
+                    <label for="appendContent">Content to Append:</label>
+                    <textarea id="appendContent" rows="6" placeholder="Enter the content that will be appended..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button onclick="buildAppendMacro()" class="save-btn">Build Macro</button>
+                    <button onclick="closeMacroModal('appendMacroModal')" class="cancel-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="spanWrapModal" class="modal hidden">
+        <div class="modal-content macro-builder">
+            <div class="modal-header">
+                <h3>📦 Wrap in Span</h3>
+                <button class="close-btn" onclick="closeMacroModal('spanWrapModal')">&times;</button>
+            </div>
+            <div class="macro-form">
+                <div class="form-group">
+                    <label for="spanWrapSelection">Selected Text:</label>
+                    <input type="text" id="spanWrapSelection" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="spanWrapId">Span ID:</label>
+                    <input type="text" id="spanWrapId" placeholder="e.g., important-text">
+                    <small class="form-help">Unique identifier for this span (used for targeting)</small>
+                </div>
+                <div class="form-group">
+                    <label for="spanWrapClass">CSS Classes (optional):</label>
+                    <input type="text" id="spanWrapClass" placeholder="e.g., highlight important">
+                </div>
+                <div class="form-actions">
+                    <button onclick="buildSpanWrap()" class="save-btn">Wrap in Span</button>
+                    <button onclick="closeMacroModal('spanWrapModal')" class="cancel-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="conditionalModal" class="modal hidden">
+        <div class="modal-content macro-builder">
+            <div class="modal-header">
+                <h3>🧠 Conditional Logic Builder</h3>
+                <button class="close-btn" onclick="closeMacroModal('conditionalModal')">&times;</button>
+            </div>
+            <div class="macro-form">
+                <div class="form-group">
+                    <label for="conditionalType">Condition Type:</label>
+                    <select id="conditionalType">
+                        <option value="if">If Statement</option>
+                        <option value="if-else">If-Else Statement</option>
+                        <option value="if-elseif-else">If-ElseIf-Else Chain</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="conditionalVariable">Variable/Condition:</label>
+                    <input type="text" id="conditionalVariable" placeholder="e.g., $player.hasKey or $visited.tavern">
+                    <small class="form-help">Use SugarCube variable syntax</small>
+                </div>
+                <div class="form-group">
+                    <label for="conditionalTrueContent">Content if True:</label>
+                    <textarea id="conditionalTrueContent" rows="4" placeholder="Content to show when condition is true..."></textarea>
+                </div>
+                <div class="form-group" id="conditionalFalseGroup" style="display: none;">
+                    <label for="conditionalFalseContent">Content if False:</label>
+                    <textarea id="conditionalFalseContent" rows="4" placeholder="Content to show when condition is false..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button onclick="buildConditional()" class="save-btn">Build Conditional</button>
+                    <button onclick="closeMacroModal('conditionalModal')" class="cancel-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="audioModal" class="modal hidden">
+        <div class="modal-content macro-builder">
+            <div class="modal-header">
+                <h3>🔊 Audio Integration</h3>
+                <button class="close-btn" onclick="closeMacroModal('audioModal')">&times;</button>
+            </div>
+            <div class="macro-form">
+                <div class="form-group">
+                    <label for="audioType">Audio Type:</label>
+                    <select id="audioType">
+                        <option value="sfx">Sound Effect</option>
+                        <option value="music">Background Music</option>
+                        <option value="voice">Voice/Narration</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="audioFile">Audio File:</label>
+                    <input type="text" id="audioFile" placeholder="e.g., sounds/door-creak.mp3">
+                    <small class="form-help">Path to your audio file</small>
+                </div>
+                <div class="form-group">
+                    <label for="audioAction">Action:</label>
+                    <select id="audioAction">
+                        <option value="play">Play Once</option>
+                        <option value="loop">Loop</option>
+                        <option value="stop">Stop</option>
+                        <option value="fadeIn">Fade In</option>
+                        <option value="fadeOut">Fade Out</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="audioVolume">Volume (0-1):</label>
+                    <input type="number" id="audioVolume" min="0" max="1" step="0.1" value="0.7">
+                </div>
+                <div class="form-actions">
+                    <button onclick="buildAudioMacro()" class="save-btn">Add Audio</button>
+                    <button onclick="closeMacroModal('audioModal')" class="cancel-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file inputs for importing maps -->
     <input type="file" id="fileInput" accept=".json" style="display: none;">
+    <input type="file" id="twFileInput" accept=".tw" style="display: none;">
 
 
 
