@@ -2710,6 +2710,27 @@ header h1 {
     padding: 2rem;
 }
 
+.preview-conditions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.preview-conditions.hidden {
+    display: none;
+}
+
+.preview-conditions label {
+    margin-right: 0.25rem;
+}
+
+.preview-conditions input {
+    width: 60px;
+}
+
 /* Modal Footer Enhancements */
 .pro-passage-editor .modal-footer {
     display: flex;
