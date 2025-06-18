@@ -3450,6 +3450,7 @@ function setupWysiwygToolbar() {
     
     // Preview actions
     document.getElementById('refreshPreviewBtn').addEventListener('click', () => refreshPreview());
+    document.getElementById('resetPreviewBtn').addEventListener('click', () => resetPreview());
     document.getElementById('fullscreenPreviewBtn').addEventListener('click', () => toggleFullscreenPreview());
 }
 
@@ -3800,24 +3801,24 @@ function convertCodeToVisual(code) {
     // Convert passage links
     visual = visual.replace(/\[\[(.*?)\]\]/g, '<a href="#" class="passage-link">$1</a>');
     
-    // Convert macros to visual representations
-    visual = visual.replace(/<<link\s+"([^"]+)">>(.*?)<<\/link>>/gs, 
-        '<span class="interactive-span" data-macro-type="link">$1</span>');
-    
-    visual = visual.replace(/<<replace\s+"#([^"]+)">>(.*?)<<\/replace>>/gs, 
-        '<span class="interactive-span" data-macro-type="replace" data-target="$1">Replace: $1</span>');
-    
-    visual = visual.replace(/<<append\s+"#([^"]+)">>(.*?)<<\/append>>/gs, 
-        '<span class="interactive-span" data-macro-type="append" data-target="$1">Append: $1</span>');
-    
-    visual = visual.replace(/<<if\s+(.*?)>>(.*?)<<\/if>>/gs, 
-        '<div class="interactive-span" data-macro-type="conditional">If: $1<br>$2</div>');
-    
-    visual = visual.replace(/<<set\s+(.*?)>>/g, 
-        '<span class="interactive-span" data-macro-type="variable">Set: $1</span>');
-    
-    visual = visual.replace(/<<audio\s+"([^"]+)"\s+(\w+).*?>>/g, 
-        '<span class="interactive-span" data-macro-type="audio">Audio: $1 ($2)</span>');
+    // Convert macros to visual representations, preserving the original macro
+    visual = visual.replace(/<<link\s+"([^"]+)">([\s\S]*?)<<\/link>>/g,
+        (m, text) => `<span class="interactive-span" data-macro="${encodeURIComponent(m)}" data-macro-type="link">${text}</span>`);
+
+    visual = visual.replace(/<<replace\s+"#([^"]+)">([\s\S]*?)<<\/replace>>/g,
+        (m, target) => `<span class="interactive-span" data-macro="${encodeURIComponent(m)}" data-macro-type="replace" data-target="${target}">Replace: ${target}</span>`);
+
+    visual = visual.replace(/<<append\s+"#([^"]+)">([\s\S]*?)<<\/append>>/g,
+        (m, target) => `<span class="interactive-span" data-macro="${encodeURIComponent(m)}" data-macro-type="append" data-target="${target}">Append: ${target}</span>`);
+
+    visual = visual.replace(/<<if\s+([^>]+)>>([\s\S]*?)<<\/if>>/g,
+        (m, cond) => `<div class="interactive-span" data-macro="${encodeURIComponent(m)}" data-macro-type="conditional">If: ${cond}<br></div>`);
+
+    visual = visual.replace(/<<set\s+([^>]+)>>/g,
+        (m, expr) => `<span class="interactive-span" data-macro="${encodeURIComponent(m)}" data-macro-type="variable">Set: ${expr}</span>`);
+
+    visual = visual.replace(/<<audio\s+"([^"]+)"\s+(\w+).*?>>/g,
+        (m, file, act) => `<span class="interactive-span" data-macro="${encodeURIComponent(m)}" data-macro-type="audio">Audio: ${file} (${act})</span>`);
     
     // Convert named spans
     visual = visual.replace(/<span\s+id="([^"]+)"([^>]*)>(.*?)<\/span>/gs, 
@@ -3832,7 +3833,11 @@ function convertCodeToVisual(code) {
 function convertVisualToCode(visual) {
     // Convert visual representation back to Twine/SugarCube code
     let code = visual;
-    
+
+    // Replace interactive macro placeholders with their original code
+    code = code.replace(/<(span|div)[^>]*data-macro="([^"]+)"[^>]*>.*?<\/(span|div)>/gs,
+        (m, _tag, macro) => decodeURIComponent(macro));
+
     // Remove visual-only classes and attributes
     code = code.replace(/\s*class="[^"]*interactive-span[^"]*"/g, '');
     code = code.replace(/\s*class="[^"]*named-span[^"]*"/g, '');
@@ -3846,13 +3851,18 @@ function convertVisualToCode(visual) {
     
     // Convert passage links
     code = code.replace(/<a[^>]*class="passage-link"[^>]*>(.*?)<\/a>/g, '[[$1]]');
-    
+
     // Convert line breaks
     code = code.replace(/<br\s*\/?>/g, '\n');
-    
-    // Clean up extra whitespace
-    code = code.replace(/\s+/g, ' ').trim();
-    
+
+    // Decode HTML entities so macros appear correctly
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = code;
+    code = textarea.value;
+
+    // Preserve user spacing
+    code = code.trim();
+
     return code;
 }
 
@@ -3940,32 +3950,181 @@ function deleteSpan(spanId) {
     }
 }
 
+let previewState = { originalHTML: '', variables: {} };
+
 function refreshPreview() {
     const preview = document.getElementById('playerPreview');
     const content = currentPassageEditor.codeContent;
-    
+
     if (!content.trim()) {
         preview.innerHTML = '<div class="preview-placeholder">Preview will appear here when you add content...</div>';
+        document.getElementById('previewConditions').classList.add('hidden');
         return;
     }
-    
-    // Simple preview rendering
-    let html = content
+
+    preview.innerHTML = '';
+    const vars = extractPreviewVariables(content);
+    vars.forEach(v => {
+        if (!(v in previewState.variables)) previewState.variables[v] = 0;
+    });
+    setupPreviewConditions(vars);
+
+    renderPreviewContent(content, preview);
+    previewState.originalHTML = preview.innerHTML;
+}
+
+function resetPreview() {
+    previewState.variables = {};
+    refreshPreview();
+}
+
+function handlePreviewLink(e) {
+    e.preventDefault();
+    const link = e.currentTarget;
+    const body = decodeURIComponent(link.dataset.body || '');
+    const temp = document.createElement('span');
+    renderPreviewContent(body, temp);
+    link.replaceWith(...temp.childNodes);
+}
+
+function renderPreviewContent(content, container) {
+    const macroRegex = /<<(link|replace|append|set|if)\b([^>]*)>>(.*?)<<\/\1>>/gs;
+    let lastIndex = 0;
+    let match;
+    while ((match = macroRegex.exec(content)) !== null) {
+        const plain = content.slice(lastIndex, match.index);
+        container.insertAdjacentHTML('beforeend', formatPreviewText(plain));
+        lastIndex = macroRegex.lastIndex;
+
+        const type = match[1];
+        const args = match[2].trim();
+        const body = match[3];
+
+        switch (type) {
+            case 'link': {
+                const t = args.match(/"([^"]+)"/);
+                const text = t ? t[1] : args;
+                const a = document.createElement('a');
+                a.href = '#';
+                a.className = 'preview-link';
+                a.textContent = text;
+                a.dataset.body = encodeURIComponent(body);
+                a.addEventListener('click', handlePreviewLink);
+                container.appendChild(a);
+                break;
+            }
+            case 'replace': {
+                const m = args.match(/"#?([^"]+)"/);
+                const id = m ? m[1] : '';
+                const target = container.querySelector('#' + id) || document.getElementById(id);
+                if (target) {
+                    const tmp = document.createElement('span');
+                    renderPreviewContent(body, tmp);
+                    target.innerHTML = tmp.innerHTML;
+                }
+                break;
+            }
+            case 'append': {
+                const m = args.match(/"#?([^"]+)"/);
+                const id = m ? m[1] : '';
+                const target = container.querySelector('#' + id) || document.getElementById(id);
+                if (target) {
+                    const tmp = document.createElement('span');
+                    renderPreviewContent(body, tmp);
+                    target.insertAdjacentHTML('beforeend', tmp.innerHTML);
+                }
+                break;
+            }
+            case 'set':
+                applyPreviewSet(args);
+                break;
+            case 'if':
+                if (evaluatePreviewCondition(args)) {
+                    renderPreviewContent(body, container);
+                }
+                break;
+        }
+    }
+    const tail = content.slice(lastIndex);
+    container.insertAdjacentHTML('beforeend', formatPreviewText(tail));
+}
+
+function formatPreviewText(text) {
+    return text
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-        .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-        .replace(/^### (.*$)/gm, '<h3>$1</h3>')
         .replace(/\[\[(.*?)\]\]/g, '<a href="#" class="passage-link">$1</a>')
-        .replace(/<<link\s+"([^"]+)">>(.*?)<<\/link>>/gs, '<button class="twine-link">$1</button>')
-        .replace(/<<replace\s+"#([^"]+)">>(.*?)<<\/replace>>/gs, '<span class="twine-replace">Replace: $1</span>')
-        .replace(/<<append\s+"#([^"]+)">>(.*?)<<\/append>>/gs, '<span class="twine-append">Append: $1</span>')
-        .replace(/<<if\s+(.*?)>>(.*?)<<\/if>>/gs, '<div class="twine-conditional">If $1: $2</div>')
-        .replace(/<<set\s+(.*?)>>/g, '<span class="twine-variable">Set: $1</span>')
-        .replace(/<<audio\s+"([^"]+)"\s+(\w+).*?>>/g, '<span class="twine-audio">♪ $1 ($2)</span>')
         .replace(/\n/g, '<br>');
-    
-    preview.innerHTML = html;
+}
+
+function extractPreviewVariables(text) {
+    const vars = new Set();
+    text.replace(/<<set\s+\$([\w]+)\s*=.*?>>/g, (_, v) => vars.add(v));
+    text.replace(/<<if\s+\$([\w]+)/g, (_, v) => vars.add(v));
+    return Array.from(vars);
+}
+
+function setupPreviewConditions(vars) {
+    const panel = document.getElementById('previewConditions');
+    panel.innerHTML = '';
+    if (vars.length === 0) {
+        panel.classList.add('hidden');
+        return;
+    }
+    panel.classList.remove('hidden');
+    vars.forEach(v => {
+        const wrap = document.createElement('div');
+        wrap.className = 'cond-item';
+        const label = document.createElement('label');
+        label.textContent = v;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = previewState.variables[v];
+        input.dataset.var = v;
+        input.addEventListener('input', () => {
+            const val = parseFloat(input.value);
+            previewState.variables[v] = isNaN(val) ? input.value : val;
+        });
+        wrap.appendChild(label);
+        wrap.appendChild(input);
+        panel.appendChild(wrap);
+    });
+}
+
+function applyPreviewSet(expr) {
+    const m = expr.match(/\$([\w]+)\s*=\s*(.+)/);
+    if (m) {
+        let val = m[2].trim();
+        if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+        const num = parseFloat(val);
+        previewState.variables[m[1]] = isNaN(num) ? val : num;
+        const input = document.querySelector(`#previewConditions input[data-var='${m[1]}']`);
+        if (input) input.value = previewState.variables[m[1]];
+    }
+}
+
+function evaluatePreviewCondition(expr) {
+    const m = expr.match(/\$([\w]+)\s*(==|!=|>=|<=|>|<)?\s*(.*)?/);
+    if (!m) return false;
+    const val = previewState.variables[m[1]];
+    const op = m[2];
+    let comp = m[3];
+    if (!op) return !!val;
+    if (comp !== undefined) {
+        comp = comp.trim();
+        if (comp.startsWith('"') && comp.endsWith('"')) comp = comp.slice(1, -1);
+        const num = parseFloat(comp);
+        comp = isNaN(num) ? comp : num;
+    }
+    switch (op) {
+        case '==': return val == comp;
+        case '!=': return val != comp;
+        case '>=': return val >= comp;
+        case '<=': return val <= comp;
+        case '>': return val > comp;
+        case '<': return val < comp;
+    }
+    return false;
 }
 
 function updateToolbarVisibility() {
