@@ -69,6 +69,7 @@ Click on the blue connectors between cells to create transitions:
 
 Each node can open the **Professional Passage Editor**. Use this tool to craft passages with a friendly Visual view, a Preview, and a raw **Code** view that now displays SugarCube macros without HTML escaping.
 
+
 ### Exporting Maps
 
 Click "Export JSON" to download your map data. The exported file includes:
