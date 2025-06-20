@@ -147,13 +147,8 @@ function setupEventListeners() {
     // Transition condition management
     document.getElementById('addCondition').addEventListener('click', () => showConditionModal('transition'));
    
-    document.getElementById('conditionForm').addEventListener('submit', (e) => {
-        if (conditionModalContext === 'node') {
-            handleConditionSubmitEnhanced(e);
-        } else {
-            handleConditionSubmit(e);
-        }
-    });
+    document.getElementById('conditionForm').addEventListener('submit', handleConditionSubmit);
+
 
     document.getElementById('cancelCondition').addEventListener('click', hideConditionModal);
     document.getElementById('conditionAction').addEventListener('change', handleConditionActionChange);
@@ -220,6 +215,7 @@ function createNewMap(name, width, height) {
     
     document.getElementById('mapTitle').textContent = `Twine Map Editor - ${name}`;
     generateGrid();
+    applyAllNodeStyling();
     closeSidebar();
 }
 
@@ -276,23 +272,33 @@ function createTransitionConnectors(cell, col, row) {
 function updateCellDisplay(cell, col, row) {
     const nodeKey = `${col},${row}`;
     const nodeData = mapData.nodes.get(nodeKey);
-    
+
+    // Clear old content
     cell.innerHTML = '';
-    
-    // Recreate transition connectors
+
+    // Remove pattern classes and inline styling
+    cell.classList.remove(
+        'node-pattern-diagonal-stripes', 'node-pattern-vertical-stripes',
+        'node-pattern-horizontal-stripes', 'node-pattern-dots',
+        'node-pattern-grid', 'node-pattern-checkerboard'
+    );
+    cell.style.backgroundColor = '';
+    cell.style.removeProperty('--node-primary-color');
+    cell.style.removeProperty('--node-secondary-color');
+
+    // Add transition connectors
     createTransitionConnectors(cell, col, row);
-    
+
     if (nodeData) {
         cell.classList.add('filled');
-        if (nodeData.fogOfWar) {
-            cell.classList.add('fog-of-war');
-        } else {
-            cell.classList.remove('fog-of-war');
-        }
-        
+        cell.classList.toggle('fog-of-war', !!nodeData.fogOfWar);
+
+        // Apply visual styles
+        applyNodeStyling(cell, nodeData);
+
         const content = document.createElement('div');
         content.className = 'node-content';
-        
+
         // Icon
         if (nodeData.icon) {
             const iconElement = document.createElement('i');
@@ -300,7 +306,7 @@ function updateCellDisplay(cell, col, row) {
             iconElement.className = 'node-icon';
             content.appendChild(iconElement);
         }
-        
+
         // Name
         if (nodeData.name) {
             const nameElement = document.createElement('div');
@@ -308,36 +314,48 @@ function updateCellDisplay(cell, col, row) {
             nameElement.textContent = nodeData.name;
             content.appendChild(nameElement);
         }
-        
+
+        // Tags (optional display)
+        if (nodeData.tags && nodeData.tags.length > 0) {
+            const tagsElement = document.createElement('div');
+            tagsElement.className = 'node-tags';
+            tagsElement.textContent = nodeData.tags.slice(0, 2).join(', ');
+            if (nodeData.tags.length > 2) {
+                tagsElement.textContent += '...';
+            }
+            content.appendChild(tagsElement);
+        }
+
         // Coordinates
         const coordsElement = document.createElement('div');
         coordsElement.className = 'node-coords';
         coordsElement.textContent = `(${col},${row})`;
         content.appendChild(coordsElement);
-        
+
         cell.appendChild(content);
-        
-        // Re-render Lucide icons
+
         if (window.lucide) {
             lucide.createIcons();
         }
     } else {
+        // Clear classes if empty
         cell.classList.remove('filled', 'fog-of-war');
-        
+
         const emptyText = document.createElement('div');
         emptyText.className = 'empty-node-text';
         emptyText.textContent = 'Empty Node';
         cell.appendChild(emptyText);
-        
+
         const coordsElement = document.createElement('div');
         coordsElement.className = 'node-coords';
         coordsElement.textContent = `(${col},${row})`;
         cell.appendChild(coordsElement);
     }
-    
-    // Update transition connectors
+
+    // Ensure transition visuals are refreshed
     updateTransitionConnectors(col, row);
 }
+
 
 function updateTransitionConnectors(col, row) {
     const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
@@ -387,24 +405,68 @@ function updateTransitionConnectors(col, row) {
 }
 
 function editNode(col, row) {
+    saveState(`Edit node (${col},${row})`);
+
     currentEditingNode = { col, row };
     currentEditingTransition = null;
-    
+
     const nodeKey = `${col},${row}`;
     const nodeData = mapData.nodes.get(nodeKey) || {};
-    
-    // Populate form
-    document.getElementById('nodeName').value = nodeData.name || '';
-    document.getElementById('passageName').value = nodeData.passage || '';
-    document.getElementById('nodeIcon').value = nodeData.icon || '';
-    document.getElementById('fogOfWar').checked = nodeData.fogOfWar || false;
-    
-    // Show node editor
+
+    // Memory support
+    if (typeof selectedTags !== 'undefined') selectedTags.clear();
+    const loadedFromMemory = typeof loadNodeMemory === 'function' ? loadNodeMemory(col, row) : false;
+
+    if (!loadedFromMemory) {
+        // Basic fields
+        document.getElementById('nodeName').value = nodeData.name || '';
+        document.getElementById('passageName').value = nodeData.passage || '';
+        document.getElementById('nodeIcon').value = nodeData.icon || '';
+        document.getElementById('fogOfWar').checked = nodeData.fogOfWar || false;
+
+        // Tags - support both old (text input) and new (selectedTags)
+        if (typeof loadTagsFromNodeData === 'function') {
+            loadTagsFromNodeData(nodeData.tags);
+        } else if (document.getElementById('nodeTags')) {
+            document.getElementById('nodeTags').value = (nodeData.tags || []).join(', ');
+        }
+
+        // Entry point loader (if defined)
+        if (typeof loadEntryPointFromNodeData === 'function') {
+            loadEntryPointFromNodeData(nodeData);
+        }
+
+        // Style fields
+        const style = nodeData.style || {};
+        document.getElementById('nodePrimaryColor').value = style.primaryColor || '#007bff';
+        document.getElementById('nodeSecondaryColor').value = style.secondaryColor || '#6c757d';
+        document.getElementById('nodePattern').value = style.pattern || 'none';
+
+        // Conditions
+        if (typeof updateNodeConditionsList === 'function') {
+            updateNodeConditionsList(nodeData.conditions || []);
+        }
+
+        // Icon preview logic
+        if (nodeData.icon && typeof updateIconSelection === 'function') {
+            updateIconSelection(nodeData.icon);
+        } else if (typeof clearIconSelection === 'function') {
+            clearIconSelection();
+        }
+    }
+
+    // Transition controls always shown
+    if (typeof populateTransitionControls === 'function') {
+        populateTransitionControls(col, row);
+    }
+
+    // Show editor UI
     document.getElementById('nodeEditor').classList.remove('hidden');
     document.getElementById('transitionEditor').classList.add('hidden');
     document.getElementById('sidebarTitle').textContent = `Edit Node (${col},${row})`;
     document.getElementById('sidebar').classList.remove('hidden');
 }
+
 
 function editTransition(fromCol, fromRow, toCol, toRow, direction) {
     currentEditingTransition = { fromCol, fromRow, toCol, toRow, direction };
@@ -550,31 +612,91 @@ function openDirectionConditions(dir) {
     document.getElementById('sidebar').classList.remove('hidden');
 }
 
-function saveNode() {
+function saveNode({ useSelectedTags = false, updateTransitions = false, updateEntryPoints = false } = {}) {
     if (!currentEditingNode) return;
-    
+
     const { col, row } = currentEditingNode;
     const nodeKey = `${col},${row}`;
-    
+
     const name = document.getElementById('nodeName').value.trim();
     const passage = document.getElementById('passageName').value.trim();
     const icon = document.getElementById('nodeIcon').value;
     const fogOfWar = document.getElementById('fogOfWar').checked;
-    
-    if (name || passage || icon) {
-        mapData.nodes.set(nodeKey, {
-            name: name,
-            passage: passage,
-            icon: icon,
-            fogOfWar: fogOfWar
+
+    // Get tags
+    const tags = useSelectedTags
+        ? Array.from(selectedTags)
+        : (document.getElementById('nodeTags')?.value.trim().split(',').map(t => t.trim()).filter(Boolean) || []);
+
+    // Style + Conditions
+    const style = {
+        primaryColor: document.getElementById('nodePrimaryColor')?.value || '#007bff',
+        secondaryColor: document.getElementById('nodeSecondaryColor')?.value || '#6c757d',
+        pattern: document.getElementById('nodePattern')?.value || 'none'
+    };
+    const conditions = getCurrentNodeConditions();
+
+    // Transitions (if used)
+    const transitions = {
+        north: document.getElementById('transition-north')?.value || '',
+        west:  document.getElementById('transition-west')?.value || '',
+        east:  document.getElementById('transition-east')?.value || '',
+        south: document.getElementById('transition-south')?.value || ''
+    };
+
+    if (name || passage || icon || tags.length > 0) {
+        setNodeData(col, row, {
+            name,
+            passage,
+            icon,
+            fogOfWar,
+            tags,
+            style,
+            conditions,
+            transitions: updateTransitions ? transitions : undefined
         });
+
+        if (updateTransitions) {
+            ['north','west','east','south'].forEach(dir => handleTransitionSelect(dir));
+        }
+
+        if (updateEntryPoints) {
+            const entryTag = tags.find(tag => tag.startsWith('entry-'));
+            if (entryTag) entryPointRegistry.set(entryTag, nodeKey);
+        }
     } else {
         mapData.nodes.delete(nodeKey);
+
+        if (updateTransitions) {
+            ['north','west','east','south'].forEach(dir => {
+                const [dx, dy] = directionOffsets[dir];
+                const tCol = col + dx;
+                const tRow = row + dy;
+                mapData.transitions.delete(`${col},${row}-${tCol},${tRow}`);
+                mapData.transitions.delete(`${tCol},${tRow}-${col},${row}`);
+            });
+        }
+
+        if (updateEntryPoints) {
+            for (const [type, registeredNodeKey] of entryPointRegistry.entries()) {
+                if (registeredNodeKey === nodeKey) {
+                    entryPointRegistry.delete(type);
+                }
+            }
+        }
     }
-    
-    updateCellDisplay(document.querySelector(`[data-col="${col}"][data-row="${row}"]`), col, row);
+
+    nodeMemory.delete(nodeKey);
+
+    const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
+    updateCellDisplay(cell, col, row);
+    applyNodeStyling(cell, mapData.nodes.get(nodeKey));
+
+    if (updateEntryPoints) updateEntryPointVisuals();
+
     closeSidebar();
 }
+
 
 function clearNode() {
     if (!currentEditingNode) return;
@@ -684,36 +806,48 @@ function handleConditionActionChange() {
 
 function handleConditionSubmit(e) {
     e.preventDefault();
-    
-    const action = document.getElementById('conditionAction').value;
+
     const type = document.getElementById('conditionType').value;
-    const name = document.getElementById('conditionName').value.trim();
-    const operator = document.getElementById('conditionOperator').value;
-    const value = document.getElementById('conditionValue').value.trim();
-    const changeTarget = document.getElementById('changeTarget').value;
-    
-    if (!name || !value) return;
-    
-    const condition = {
-        action: action,
-        type: type,
-        name: name,
-        operator: operator,
-        value: value
-    };
-    
-    if (action === 'changeIf') {
+    const action = document.getElementById('conditionAction')?.value || null;
+    const operator = document.getElementById('conditionOperator')?.value || null;
+    const name = document.getElementById('conditionName')?.value.trim() || '';
+    const value = document.getElementById('conditionValue')?.value.trim() || '';
+    const variableValue = document.getElementById('variableValue')?.value.trim() || '';
+    const changeTarget = document.getElementById('changeTarget')?.value || '';
+
+    if (!value && !name) return;
+
+    const condition = { type };
+
+    if (type === 'item') {
+        condition.item = value;
+    } else if (type === 'quest') {
+        condition.quest = value;
+    } else if (type === 'variable') {
+        condition.variable = value;
+        condition.value = variableValue || value; // fallback if one is missing
+        if (operator) condition.operator = operator;
+    } else {
+        // Fallback for older logic
+        if (name) condition.name = name;
+        if (operator) condition.operator = operator;
+        if (value) condition.value = value;
+    }
+
+    if (action) condition.action = action;
+    if (action === 'changeIf' && changeTarget) {
         condition.changeTarget = changeTarget;
     }
-    
+
     if (conditionModalContext === 'node') {
         addNodeConditionToList(condition);
     } else {
         addConditionToList(condition);
     }
-    
+
     hideConditionModal();
 }
+
 
 function addConditionToList(condition) {
     const conditionsList = document.getElementById('conditionsList');
@@ -794,41 +928,50 @@ function toggleTheme() {
     }
 }
 
-function exportMap() {
+function exportMap({ usePrompt = false, includeExtras = false } = {}) {
     if (mapData.nodes.size === 0) {
         alert('No nodes to export. Please add some nodes first.');
         return;
     }
-    
-    // Find a default start position (first node with data)
+
+    // Prompt for filename if needed
+    const defaultId = mapData.name.toLowerCase().replace(/\s+/g, '_');
+    const filename = usePrompt ? promptForFilename(defaultId, 'json') : defaultId;
+    if (filename === null) return;
+
+    // Find default start node
     let defaultStart = null;
-    for (const [key, nodeData] of mapData.nodes) {
+    for (const [key] of mapData.nodes) {
         const [col, row] = key.split(',').map(Number);
         defaultStart = { x: col, y: row };
         break;
     }
-    
     if (!defaultStart) {
         alert('No valid nodes found for export.');
         return;
     }
-    
-    // Build export data
+
+    // Base export structure
     const exportData = {
-        mapId: mapData.name.toLowerCase().replace(/\s+/g, '_'),
+        mapId: filename,
         name: mapData.name,
         gridSize: {
             width: mapData.width,
             height: mapData.height
         },
-        defaultStart: defaultStart,
+        defaultStart,
         nodes: []
     };
-    
-    // Convert nodes to export format
+
+    if (includeExtras) {
+        exportData.passageTexts = Object.fromEntries(passageTexts);
+        exportData.projectTagLibrary = Array.from(projectTagLibrary || []);
+        exportData.entryPointRegistry = Object.fromEntries(entryPointRegistry || []);
+    }
+
+    // Export all nodes
     for (const [key, nodeData] of mapData.nodes) {
         const [col, row] = key.split(',').map(Number);
-        
         const exportNode = {
             column: col,
             row: row,
@@ -836,100 +979,66 @@ function exportMap() {
             passage: nodeData.passage || '',
             icon: nodeData.icon || '',
             fogOfWar: nodeData.fogOfWar || false,
+            tags: nodeData.tags || [],
+            style: nodeData.style || {},
+            conditions: nodeData.conditions || [],
             transitions: {}
         };
-        
-        // Add transitions for this node (both outgoing and incoming)
+
+        // Collect transitions (both outgoing and incoming)
         for (const [transitionKey, transitionData] of mapData.transitions) {
             const [from, to] = transitionKey.split('-');
             const [fromCol, fromRow] = from.split(',').map(Number);
             const [toCol, toRow] = to.split(',').map(Number);
-            
-            // Handle outgoing transitions (this node is the source)
-            if (fromCol === col && fromRow === row) {
-                // Determine direction from this node to target
-                let direction;
-                if (toCol > fromCol) direction = 'east';
-                else if (toCol < fromCol) direction = 'west';
-                else if (toRow > fromRow) direction = 'south';
-                else if (toRow < fromRow) direction = 'north';
-                
-                if (direction) {
-                    exportNode.transitions[direction] = {
-                        type: transitionData.type,
-                        conditions: transitionData.conditions || []
-                    };
+
+            let forwardDir, reverseDir;
+            if (toCol > fromCol) [forwardDir, reverseDir] = ['east', 'west'];
+            else if (toCol < fromCol) [forwardDir, reverseDir] = ['west', 'east'];
+            else if (toRow > fromRow) [forwardDir, reverseDir] = ['south', 'north'];
+            else if (toRow < fromRow) [forwardDir, reverseDir] = ['north', 'south'];
+
+            if (fromCol === col && fromRow === row && forwardDir) {
+                const trans = {
+                    type: transitionData.type,
+                    conditions: transitionData.conditions || []
+                };
+                if (transitionData.type === 'one-way') {
+                    trans.direction = transitionData.direction || forwardDir;
                 }
+                exportNode.transitions[forwardDir] = trans;
             }
-            
-            // Handle incoming transitions (this node is the target)
-            // Only add if the transition is bidirectional or if it's a one-way pointing to this node
-            if (toCol === col && toRow === row && fromCol !== col && fromRow !== row) {
-                // Determine direction from target back to source
-                let direction;
-                if (fromCol > toCol) direction = 'east';
-                else if (fromCol < toCol) direction = 'west';
-                else if (fromRow > toRow) direction = 'south';
-                else if (fromRow < toRow) direction = 'north';
-                
-                if (direction) {
-                    // For bidirectional transitions, add the reverse direction
-                    if (transitionData.type === 'bidirectional') {
-                        exportNode.transitions[direction] = {
-                            type: 'bidirectional',
-                            conditions: transitionData.conditions || []
-                        };
-                    }
-                    // For one-way transitions, add with proper directional restriction info
-                    else if (transitionData.type === 'one-way') {
-                        // Determine the original allowed direction from the transition data
-                        let originalDirection = transitionData.direction;
-                        
-                        // If no specific direction was stored, infer it from the transition key
-                        if (!originalDirection) {
-                            if (toCol > fromCol) originalDirection = 'east';
-                            else if (toCol < fromCol) originalDirection = 'west';
-                            else if (toRow > fromRow) originalDirection = 'south';
-                            else if (toRow < fromRow) originalDirection = 'north';
-                        }
-                        
-                        // Add transition info showing this direction is blocked (reverse of allowed direction)
-                        exportNode.transitions[direction] = {
-                            type: 'one-way-blocked',
-                            allowedDirection: originalDirection,
-                            blockedDirection: direction,
-                            conditions: transitionData.conditions || []
-                        };
-                    }
-                    // For other transition types (locked, secret), also include them
-                    else if (transitionData.type === 'locked' || transitionData.type === 'secret') {
-                        exportNode.transitions[direction] = {
-                            type: transitionData.type,
-                            conditions: transitionData.conditions || []
-                        };
-                    }
+
+            if (toCol === col && toRow === row && reverseDir) {
+                const trans = {
+                    type: transitionData.type,
+                    conditions: transitionData.conditions || []
+                };
+                if (transitionData.type === 'one-way') {
+                    trans.direction = transitionData.direction || forwardDir;
                 }
+                exportNode.transitions[reverseDir] = trans;
             }
         }
-        
+
         exportData.nodes.push(exportNode);
     }
-    
-    // Download JSON file
+
+    // Download as JSON
     const jsonString = JSON.stringify(exportData, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    
+
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${exportData.mapId}.json`;
+    a.download = `${filename}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     alert('Map exported successfully!');
 }
+
 
 // NEW FUNCTIONALITY
 
@@ -941,105 +1050,109 @@ function importMap() {
 function handleFileImport(event) {
     const file = event.target.files[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         try {
             const importedData = JSON.parse(e.target.result);
-            loadImportedMap(importedData);
+
+            // Basic structure validation
+            if (!importedData.name || !Array.isArray(importedData.nodes)) {
+                alert('Invalid map file format');
+                return;
+            }
+
+            pendingImportData = importedData;
+
+            // If a map is already loaded, ask how to proceed
+            if (mapData.nodes.size > 0) {
+                showImportChoiceModal(); // e.g., merge or overwrite
+            } else {
+                showTwineFileModal(importedData); // ask if they want to upload a .tw file
+            }
         } catch (error) {
             alert('Error reading file: Invalid JSON format');
             console.error('Import error:', error);
         }
     };
+
     reader.readAsText(file);
-    
-    // Reset file input
-    event.target.value = '';
+    event.target.value = ''; // Reset file input
 }
 
+
 function loadImportedMap(importedData) {
-    // Validate imported data structure
-    if (!importedData.name || !importedData.nodes || !Array.isArray(importedData.nodes)) {
+    // Validate structure
+    if (!importedData.name || !Array.isArray(importedData.nodes)) {
         alert('Invalid map file format');
         return;
     }
-    
-    // Determine grid size from nodes or use provided gridSize
-    let maxCol = 0, maxRow = 0;
-    let width = 5, height = 5; // defaults
-    
-    // Check if gridSize is provided in the import data
+
+    // Determine grid size
+    let width = 5, height = 5;
     if (importedData.gridSize) {
         width = importedData.gridSize.width;
         height = importedData.gridSize.height;
     } else {
-        // Calculate from node positions
         importedData.nodes.forEach(node => {
-            // Handle both formats: {x, y} and {column, row}
-            const col = node.x !== undefined ? node.x : node.column;
-            const row = node.y !== undefined ? node.y : node.row;
-            
-            if (col > maxCol) maxCol = col;
-            if (row > maxRow) maxRow = row;
+            const col = node.x ?? node.column;
+            const row = node.y ?? node.row;
+            width = Math.max(width, col + 1);
+            height = Math.max(height, row + 1);
         });
-        
-        width = Math.max(maxCol + 1, 5);
-        height = Math.max(maxRow + 1, 5);
     }
-    
-    // Create new map with imported data
+
+    // Initialize map
     mapData = {
         name: importedData.name,
-        width: width,
-        height: height,
+        width,
+        height,
         nodes: new Map(),
         transitions: new Map()
     };
-    
+
     // Load nodes
     importedData.nodes.forEach(node => {
-        // Handle both formats: {x, y} and {column, row}
-        const col = node.x !== undefined ? node.x : node.column;
-        const row = node.y !== undefined ? node.y : node.row;
-        
-        const nodeKey = `${col},${row}`;
-        mapData.nodes.set(nodeKey, {
-            name: node.name || '',
-            passage: node.passage || '',
-            icon: node.icon || '',
-            fogOfWar: node.fogOfWar || false,
-            conditions: node.conditions || [],
-            transitions: node.transitions || {}
+        const col = node.x ?? node.column;
+        const row = node.y ?? node.row;
+
+        setNodeData(col, row, {
+            name: node.name,
+            passage: node.passage,
+            icon: node.icon,
+            fogOfWar: node.fogOfWar,
+            tags: node.tags,
+            conditions: node.conditions,
+            style: node.style,
+            transitions: node.transitions
         });
-        
-        // Load transitions
+
+        // Load transitions into transition map
         if (node.transitions) {
             Object.entries(node.transitions).forEach(([direction, transition]) => {
-                let targetCol = col;
-                let targetRow = row;
-                
+                let targetCol = col, targetRow = row;
                 switch (direction) {
                     case 'north': targetRow--; break;
                     case 'south': targetRow++; break;
-                    case 'east': targetCol++; break;
-                    case 'west': targetCol--; break;
+                    case 'east':  targetCol++; break;
+                    case 'west':  targetCol--; break;
                 }
-                
-                const transitionKey = `${col},${row}-${targetCol},${targetRow}`;
-                mapData.transitions.set(transitionKey, {
-                    type: transition.type || 'bidirectional',
-                    direction: transition.direction || null,
-                    conditions: transition.conditions || []
+
+                const key = `${col},${row}-${targetCol},${targetRow}`;
+                mapData.transitions.set(key, {
+                    type: transition.type ?? 'bidirectional',
+                    direction: transition.direction ?? null,
+                    conditions: transition.conditions ?? []
                 });
             });
         }
     });
-    
+
     // Update UI
     document.getElementById('mapTitle').textContent = `Twine Map Editor - ${mapData.name}`;
     generateGrid();
-    // Refresh all connectors to reflect current transition types
+    applyAllNodeStyling();
+
     for (let row = 0; row < mapData.height; row++) {
         for (let col = 0; col < mapData.width; col++) {
             updateTransitionConnectors(col, row);
@@ -1048,9 +1161,10 @@ function loadImportedMap(importedData) {
 
     closeSidebar();
     hideSetupModal();
-    
     alert('Map imported successfully!');
 }
+
+
 
 // Node memory functionality
 function setupNodeMemoryListeners() {
@@ -1110,37 +1224,6 @@ function loadNodeMemory(col, row) {
     return false;
 }
 
-// Enhanced editNode function with memory
-function editNodeWithMemory(col, row) {
-    currentEditingNode = { col, row };
-    currentEditingTransition = null;
-    
-    const nodeKey = `${col},${row}`;
-    
-    // Try to load from memory first, then from saved data
-    if (!loadedFromMemory) {
-        const nodeData = mapData.nodes.get(nodeKey) || {};
-        document.getElementById('nodeName').value = nodeData.name || '';
-        document.getElementById('passageName').value = nodeData.passage || '';
-        document.getElementById('nodeIcon').value = nodeData.icon || '';
-        document.getElementById('fogOfWar').checked = nodeData.fogOfWar || false;
-        updateNodeConditionsList(nodeData.conditions || []);
-        
-        // Update icon selection UI
-        if (nodeData.icon) {
-            updateIconSelection(nodeData.icon);
-        } else {
-            clearIconSelection();
-        }
-        populateTransitionControls(col, row);
-    }
-    
-    // Show node editor
-    document.getElementById('nodeEditor').classList.remove('hidden');
-    document.getElementById('transitionEditor').classList.add('hidden');
-    document.getElementById('sidebarTitle').textContent = `Edit Node (${col},${row})`;
-    document.getElementById('sidebar').classList.remove('hidden');
-}
 
 // Node conditions functionality
 function showConditionModal(context) {
@@ -1150,34 +1233,6 @@ function showConditionModal(context) {
     handleConditionActionChange();
 }
 
-function handleConditionSubmitEnhanced(e) {
-    e.preventDefault();
-    
-    const type = document.getElementById('conditionType').value;
-    const value = document.getElementById('conditionValue').value.trim();
-    const variableValue = document.getElementById('variableValue').value.trim();
-    
-    if (!value) return;
-    
-    const condition = { type };
-    
-    if (type === 'item') {
-        condition.item = value;
-    } else if (type === 'quest') {
-        condition.quest = value;
-    } else if (type === 'variable') {
-        condition.variable = value;
-        condition.value = variableValue;
-    }
-    
-    if (conditionModalContext === 'node') {
-        addNodeConditionToList(condition);
-    } else {
-        addConditionToList(condition);
-    }
-    
-    hideConditionModal();
-}
 
 function addNodeConditionToList(condition) {
     const conditionsList = document.getElementById('nodeConditionsList');
@@ -1251,110 +1306,73 @@ function getCurrentNodeConditions() {
     return conditions;
 }
 
-// Enhanced saveNode with conditions
-function saveNodeEnhanced() {
-    if (!currentEditingNode) return;
-    
-    const { col, row } = currentEditingNode;
-    const nodeKey = `${col},${row}`;
-    
-    const name = document.getElementById('nodeName').value.trim();
-    const passage = document.getElementById('passageName').value.trim();
-    const icon = document.getElementById('nodeIcon').value;
-    const fogOfWar = document.getElementById('fogOfWar').checked;
-    const conditions = getCurrentNodeConditions();
-    
-    if (name || passage || icon) {
-        mapData.nodes.set(nodeKey, {
-            name: name,
-            passage: passage,
-            icon: icon,
-            fogOfWar: fogOfWar,
-            conditions: conditions
-        });
-    } else {
-        mapData.nodes.delete(nodeKey);
-    }
-    
-    // Clear memory for this node
-    nodeMemory.delete(nodeKey);
-    
-    updateCellDisplay(document.querySelector(`[data-col="${col}"][data-row="${row}"]`), col, row);
-    closeSidebar();
-}
 
 // Export Twine (.tw) file functionality
-function exportTwineFile() {
+function exportTwineFile({ usePrompt = false, includePassageTexts = false } = {}) {
     if (mapData.nodes.size === 0) {
         alert('No nodes to export. Please add some nodes first.');
         return;
     }
-    
-    const passages = new Set();
-    
-    // Collect all passage names from nodes
-    for (const [key, nodeData] of mapData.nodes) {
-        if (nodeData.passage) {
-            passages.add(nodeData.passage);
+
+    const defaultFilename = `${mapData.name.toLowerCase().replace(/\s+/g, '_')}_passages`;
+    const filename = usePrompt ? promptForFilename(defaultFilename, 'tw') : defaultFilename;
+    if (filename === null) return;
+
+    let twContent = '';
+    let passageCount = 0;
+
+    for (const [nodeKey, nodeData] of mapData.nodes) {
+        if (!nodeData.passage) continue;
+
+        const passageData = passageTexts.get(nodeKey);
+
+        // Main passage
+        twContent += `:: ${nodeData.passage}\n`;
+        if (includePassageTexts && passageData?.main) {
+            twContent += passageData.main + '\n\n';
+        } else {
+            twContent += `<!-- Auto-generated passage for ${mapData.name} -->\n`;
+            twContent += `<!-- Add your passage content here -->\n\n`;
         }
-        
-        // Add conditional passages based on node conditions
-        if (nodeData.conditions && nodeData.conditions.length > 0) {
-            nodeData.conditions.forEach(condition => {
-                if (condition.type === 'variable') {
-                    // Create conditional passage variants
-                    passages.add(`${nodeData.passage}_${condition.variable}_${condition.value}`);
+        passageCount++;
+
+        // Conditional passages
+        if (nodeData.conditions?.length > 0) {
+            for (const condition of nodeData.conditions) {
+                const condPassage = condition.passage;
+                twContent += `:: ${condPassage}\n`;
+
+                if (includePassageTexts && passageData?.conditions?.[condPassage]) {
+                    twContent += passageData.conditions[condPassage] + '\n\n';
+                } else {
+                    twContent += `<!-- Conditional passage: ${condition.description || 'No description'} -->\n`;
+                    twContent += `<!-- Condition: ${condition.type} "${condition.name}" ${condition.operator} ${condition.value} -->\n`;
+                    twContent += `<!-- Add your conditional passage content here -->\n\n`;
                 }
-            });
-        }
-    }
-    
-    // Collect passages from transition conditions
-    for (const [key, transitionData] of mapData.transitions) {
-        if (transitionData.conditions && transitionData.conditions.length > 0) {
-            const [from] = key.split('-');
-            const [fromCol, fromRow] = from.split(',').map(Number);
-            const fromNodeKey = `${fromCol},${fromRow}`;
-            const fromNode = mapData.nodes.get(fromNodeKey);
-            
-            if (fromNode && fromNode.passage) {
-                transitionData.conditions.forEach(condition => {
-                    if (condition.type === 'variable') {
-                        passages.add(`${fromNode.passage}_${condition.variable}_${condition.value}`);
-                    }
-                });
+                passageCount++;
             }
         }
     }
-    
-    // Generate .tw file content
-    let twContent = '';
-    
-    passages.forEach(passageName => {
-        twContent += `:: ${passageName}\n`;
-        twContent += `<!-- Auto-generated passage for ${mapData.name} -->\n`;
-        twContent += `<!-- Add your passage content here -->\n\n`;
-    });
-    
-    // Add a special map data passage
+
+    // Map metadata passage
     twContent += `:: ${mapData.name.replace(/\s+/g, '_')}_MapData\n`;
     twContent += `<!-- Map data for ${mapData.name} -->\n`;
     twContent += `<!-- This passage contains the map configuration -->\n\n`;
-    
-    // Download .tw file
+
+    // Download the .tw file
     const blob = new Blob([twContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
-    
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${mapData.name.toLowerCase().replace(/\s+/g, '_')}_passages.tw`;
+    a.download = `${filename}.tw`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
-    alert(`Twine file exported with ${passages.size} passages!`);
+
+    alert(`Twine file exported with ${passageCount} passages!`);
 }
+
 
 // Auto-save functionality
 function setupAutoSave() {
@@ -1410,6 +1428,7 @@ function loadFromLocalStorage() {
                 document.getElementById('mapTitle').textContent = `Twine Map Editor - ${mapData.name}`;
                 hideSetupModal();
                 generateGrid();
+                applyAllNodeStyling();
                 
                 // IMPORTANT: Update all transition connectors after grid generation
                 // This ensures that the visual styles match the loaded transition data
@@ -1778,12 +1797,6 @@ function initializeIconSelection() {
 }
 
 
-
-// Replace original functions with enhanced versions
-editNode = editNodeWithMemory;
-saveNode = saveNodeEnhanced;
-
-
 // Condition Icon Selection functionality
 let selectedConditionIcon = '';
 
@@ -2133,26 +2146,24 @@ function handlePlacementClick(event) {
     document.getElementById('placementStatus').className = 'placement-status valid';
 }
 
-
 function confirmPlacement() {
     if (!placementMode || !placementPreviewData || !placementPreviewData.currentPlacement) return;
-    
-    const { targetCol, targetRow, offsetCol, offsetRow, canPlace } = placementPreviewData.currentPlacement;
-    
+
+    const { offsetCol, offsetRow, canPlace } = placementPreviewData.currentPlacement;
     if (!canPlace) return;
-    
+
     // Check if we need to expand the grid
     let needsExpansion = false;
     let newWidth = mapData.width;
     let newHeight = mapData.height;
-    
+
     placementPreviewData.nodes.forEach(node => {
-        const nodeCol = node.x !== undefined ? node.x : node.column;
-        const nodeRow = node.y !== undefined ? node.y : node.row;
-        
+        const nodeCol = node.x ?? node.column;
+        const nodeRow = node.y ?? node.row;
+
         const newCol = nodeCol + offsetCol;
         const newRow = nodeRow + offsetRow;
-        
+
         if (newCol >= mapData.width) {
             newWidth = Math.max(newWidth, newCol + 1);
             needsExpansion = true;
@@ -2162,70 +2173,69 @@ function confirmPlacement() {
             needsExpansion = true;
         }
     });
-    
-    // Expand grid if necessary
+
     if (needsExpansion) {
         mapData.width = newWidth;
         mapData.height = newHeight;
-        generateGrid(); // Regenerate grid with new size
+        generateGrid();
+        applyAllNodeStyling();
     }
-    
-    // Place the nodes
+
+    // Place and connect nodes
     placementPreviewData.nodes.forEach(node => {
-        const nodeCol = node.x !== undefined ? node.x : node.column;
-        const nodeRow = node.y !== undefined ? node.y : node.row;
-        
+        const nodeCol = node.x ?? node.column;
+        const nodeRow = node.y ?? node.row;
+
         const newCol = nodeCol + offsetCol;
         const newRow = nodeRow + offsetRow;
-        const nodeKey = `${newCol},${newRow}`;
-        
-        // Add the node
-        mapData.nodes.set(nodeKey, {
-            name: node.name || '',
-            passage: node.passage || '',
-            icon: node.icon || '',
-            fogOfWar: node.fogOfWar || false,
-            conditions: node.conditions || []
+
+        setNodeData(newCol, newRow, {
+            name: node.name,
+            passage: node.passage,
+            icon: node.icon,
+            fogOfWar: node.fogOfWar,
+            tags: node.tags,
+            conditions: node.conditions,
+            style: node.style,
+            transitions: node.transitions
         });
-        
-        // Add transitions
+
         if (node.transitions) {
             Object.entries(node.transitions).forEach(([direction, transition]) => {
                 let targetCol = newCol;
                 let targetRow = newRow;
-                
+
                 switch (direction) {
                     case 'north': targetRow--; break;
                     case 'south': targetRow++; break;
-                    case 'east': targetCol++; break;
-                    case 'west': targetCol--; break;
+                    case 'east':  targetCol++; break;
+                    case 'west':  targetCol--; break;
                 }
-                
+
                 const transitionKey = `${newCol},${newRow}-${targetCol},${targetRow}`;
                 mapData.transitions.set(transitionKey, {
-                    type: transition.type || 'bidirectional',
-                    direction: transition.direction || null,
-                    conditions: transition.conditions || []
+                    type: transition.type ?? 'bidirectional',
+                    direction: transition.direction ?? null,
+                    conditions: transition.conditions ?? []
                 });
             });
         }
     });
-    
-    // Always update the affected cells after placement, regardless of expansion
-    placementPreviewData.nodes.forEach(node => {
-        const nodeCol = node.x !== undefined ? node.x : node.column;
-        const nodeRow = node.y !== undefined ? node.y : node.row;
 
+    // Refresh visuals
+    placementPreviewData.nodes.forEach(node => {
+        const nodeCol = node.x ?? node.column;
+        const nodeRow = node.y ?? node.row;
         const newCol = nodeCol + offsetCol;
         const newRow = nodeRow + offsetRow;
 
         const cell = document.querySelector(`[data-col="${newCol}"][data-row="${newRow}"]`);
         if (cell) {
             updateCellDisplay(cell, newCol, newRow);
+            applyNodeStyling(cell, mapData.nodes.get(`${newCol},${newRow}`));
         }
     });
 
-    
     cancelPlacement();
     alert('Map section placed successfully!');
 }
@@ -2249,45 +2259,6 @@ function cancelPlacement() {
     });
 }
 
-// Modified import function to handle choice modal
-function handleFileImportEnhanced(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const importedData = JSON.parse(e.target.result);
-            
-            // Validate imported data structure
-            if (!importedData.name || !importedData.nodes || !Array.isArray(importedData.nodes)) {
-                alert('Invalid map file format');
-                return;
-            }
-            
-            pendingImportData = importedData;
-            
-            // Check if we have an existing map
-            if (mapData.nodes.size > 0) {
-                showImportChoiceModal();
-            } else {
-                // Show Twine file modal for dual import
-                showTwineFileModal(importedData);
-            }
-        } catch (error) {
-            alert('Error reading file: Invalid JSON format');
-            console.error('Import error:', error);
-        }
-    };
-    reader.readAsText(file);
-    
-    // Reset file input
-    event.target.value = '';
-}
-
-// Replace the original file import handler
-document.getElementById('fileInput').removeEventListener('change', handleFileImport);
-document.getElementById('fileInput').addEventListener('change', handleFileImportEnhanced);
 
 // Dual file upload functionality
 function setupTwineFileModalListeners() {
@@ -2973,7 +2944,7 @@ function saveState(action) {
 
 function performUndo() {
     if (undoStack.length === 0) return;
-    
+
     // Save current state to redo stack
     const currentState = {
         action: 'redo_point',
@@ -2988,17 +2959,17 @@ function performUndo() {
         passageTexts: new Map(passageTexts)
     };
     redoStack.push(currentState);
-    
+
     // Restore previous state
     const previousState = undoStack.pop();
     restoreState(previousState);
-    
+
     updateUndoRedoButtons();
 }
 
 function performRedo() {
     if (redoStack.length === 0) return;
-    
+
     // Save current state to undo stack
     const currentState = {
         action: 'undo_point',
@@ -3013,11 +2984,11 @@ function performRedo() {
         passageTexts: new Map(passageTexts)
     };
     undoStack.push(currentState);
-    
+
     // Restore next state
     const nextState = redoStack.pop();
     restoreState(nextState);
-    
+
     updateUndoRedoButtons();
 }
 
@@ -3029,13 +3000,21 @@ function restoreState(state) {
         nodes: new Map(state.mapData.nodes),
         transitions: new Map(state.mapData.transitions)
     };
-    
+
     passageTexts = new Map(state.passageTexts);
-    
+
     // Update UI
     document.getElementById('mapTitle').textContent = `Twine Map Editor - ${mapData.name}`;
     generateGrid();
+    applyAllNodeStyling();
     closeSidebar();
+
+    // ✅ Refresh all transition visuals
+    for (let row = 0; row < mapData.height; row++) {
+        for (let col = 0; col < mapData.width; col++) {
+            updateTransitionConnectors(col, row);
+        }
+    }
 }
 
 function updateUndoRedoButtons() {
@@ -3099,234 +3078,51 @@ function setupStyleControls() {
 
 function applyNodeStyling(cell, nodeData) {
     if (!nodeData.style) return;
-    
+
     const { primaryColor, secondaryColor, pattern } = nodeData.style;
-    
+
     // Apply primary color
     if (primaryColor && primaryColor !== '#007bff') {
         cell.style.backgroundColor = primaryColor;
         cell.style.setProperty('--node-primary-color', primaryColor);
     }
-    
+
     // Apply secondary color for patterns
     if (secondaryColor && secondaryColor !== '#6c757d') {
         cell.style.setProperty('--node-secondary-color', secondaryColor);
     }
-    
-    // Apply pattern
+
+    // Reset any old pattern classes
+    cell.classList.remove(
+        'node-pattern-diagonal-stripes',
+        'node-pattern-vertical-stripes',
+        'node-pattern-horizontal-stripes',
+        'node-pattern-dots',
+        'node-pattern-grid',
+        'node-pattern-checkerboard'
+    );
+
+    // Apply pattern if any
     if (pattern && pattern !== 'none') {
         cell.classList.add(`node-pattern-${pattern}`);
     }
 }
 
-// Enhanced node editing with new features
-function editNodeEnhanced(col, row) {
-    saveState(`Edit node (${col},${row})`);
-    
-    currentEditingNode = { col, row };
-    currentEditingTransition = null;
-    
-    const nodeKey = `${col},${row}`;
-    
-    // Try to load from memory first, then from saved data
-    if (!loadedFromMemory) {
-        const nodeData = mapData.nodes.get(nodeKey) || {};
-        
-        // Basic fields
-        document.getElementById('nodeName').value = nodeData.name || '';
-        document.getElementById('passageName').value = nodeData.passage || '';
-        document.getElementById('nodeIcon').value = nodeData.icon || '';
-        document.getElementById('fogOfWar').checked = nodeData.fogOfWar || false;
-        
-        // Tags
-        document.getElementById('nodeTags').value = (nodeData.tags || []).join(', ');
-        
-        // Style
-        if (nodeData.style) {
-            document.getElementById('nodePrimaryColor').value = nodeData.style.primaryColor || '#007bff';
-            document.getElementById('nodeSecondaryColor').value = nodeData.style.secondaryColor || '#6c757d';
-            document.getElementById('nodePattern').value = nodeData.style.pattern || 'none';
-        } else {
-            document.getElementById('nodePrimaryColor').value = '#007bff';
-            document.getElementById('nodeSecondaryColor').value = '#6c757d';
-            document.getElementById('nodePattern').value = 'none';
-        }
-        
-        updateNodeConditionsList(nodeData.conditions || []);
-        
-        // Update icon selection UI
-        if (nodeData.icon) {
-            updateIconSelection(nodeData.icon);
-        } else {
-            clearIconSelection();
-        }
-        populateTransitionControls(col, row);
-    } else {
-        // memory loaded
-        populateTransitionControls(col, row);
-    }
-    
-    // Show node editor
-    document.getElementById('nodeEditor').classList.remove('hidden');
-    document.getElementById('transitionEditor').classList.add('hidden');
-    document.getElementById('sidebarTitle').textContent = `Edit Node (${col},${row})`;
-    document.getElementById('sidebar').classList.remove('hidden');
-}
+function applyAllNodeStyling() {
+    for (let row = 0; row < mapData.height; row++) {
+        for (let col = 0; col < mapData.width; col++) {
+            const key = `${col},${row}`;
+            const nodeData = mapData.nodes.get(key);
+            if (!nodeData) continue;
 
-// Enhanced save node with new features
-function saveNodeWithFeatures() {
-    if (!currentEditingNode) return;
-    
-    const { col, row } = currentEditingNode;
-    const nodeKey = `${col},${row}`;
-    
-    const name = document.getElementById('nodeName').value.trim();
-    const passage = document.getElementById('passageName').value.trim();
-    const icon = document.getElementById('nodeIcon').value;
-    const fogOfWar = document.getElementById('fogOfWar').checked;
-    
-    // Parse tags
-    const tagsInput = document.getElementById('nodeTags').value.trim();
-    const tags = tagsInput ? tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
-    
-    // Get style
-    const style = {
-        primaryColor: document.getElementById('nodePrimaryColor').value,
-        secondaryColor: document.getElementById('nodeSecondaryColor').value,
-        pattern: document.getElementById('nodePattern').value
-    };
-    
-    const conditions = getCurrentNodeConditions();
-
-    if (name || passage || icon || tags.length > 0) {
-        const transitions = {
-            north: document.getElementById('transition-north').value,
-            west: document.getElementById('transition-west').value,
-            east: document.getElementById('transition-east').value,
-            south: document.getElementById('transition-south').value
-        };
-
-        mapData.nodes.set(nodeKey, {
-            name: name,
-            passage: passage,
-            icon: icon,
-            fogOfWar: fogOfWar,
-            tags: tags,
-            style: style,
-            conditions: conditions,
-            transitions: transitions
-        });
-
-        ['north','west','east','south'].forEach(dir => handleTransitionSelect(dir));
-    } else {
-        mapData.nodes.delete(nodeKey);
-    }
-    
-    // Clear memory for this node
-    nodeMemory.delete(nodeKey);
-    
-    const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
-    updateCellDisplay(cell, col, row);
-    
-    // Apply styling
-    const nodeData = mapData.nodes.get(nodeKey);
-    if (nodeData) {
-        applyNodeStyling(cell, nodeData);
-    }
-    
-    closeSidebar();
-}
-
-// Enhanced updateCellDisplay with styling
-function updateCellDisplayEnhanced(cell, col, row) {
-    const nodeKey = `${col},${row}`;
-    const nodeData = mapData.nodes.get(nodeKey);
-    
-    cell.innerHTML = '';
-    
-    // Remove all pattern classes
-    cell.classList.remove('node-pattern-diagonal-stripes', 'node-pattern-vertical-stripes', 
-                         'node-pattern-horizontal-stripes', 'node-pattern-dots', 
-                         'node-pattern-grid', 'node-pattern-checkerboard');
-    
-    // Reset inline styles
-    cell.style.backgroundColor = '';
-    cell.style.removeProperty('--node-primary-color');
-    cell.style.removeProperty('--node-secondary-color');
-    
-    // Recreate transition connectors
-    createTransitionConnectors(cell, col, row);
-    
-    if (nodeData) {
-        cell.classList.add('filled');
-        if (nodeData.fogOfWar) {
-            cell.classList.add('fog-of-war');
-        } else {
-            cell.classList.remove('fog-of-war');
-        }
-        
-        // Apply styling
-        applyNodeStyling(cell, nodeData);
-        
-        const content = document.createElement('div');
-        content.className = 'node-content';
-        
-        // Icon
-        if (nodeData.icon) {
-            const iconElement = document.createElement('i');
-            iconElement.setAttribute('data-lucide', nodeData.icon);
-            iconElement.className = 'node-icon';
-            content.appendChild(iconElement);
-        }
-        
-        // Name
-        if (nodeData.name) {
-            const nameElement = document.createElement('div');
-            nameElement.className = 'node-name';
-            nameElement.textContent = nodeData.name;
-            content.appendChild(nameElement);
-        }
-        
-        // Tags (show first few)
-        if (nodeData.tags && nodeData.tags.length > 0) {
-            const tagsElement = document.createElement('div');
-            tagsElement.className = 'node-tags';
-            tagsElement.textContent = nodeData.tags.slice(0, 2).join(', ');
-            if (nodeData.tags.length > 2) {
-                tagsElement.textContent += '...';
+            const cell = document.querySelector(`.tile[data-col='${col}'][data-row='${row}']`);
+            if (cell) {
+                applyNodeStyling(cell, nodeData);
             }
-            content.appendChild(tagsElement);
         }
-        
-        // Coordinates
-        const coordsElement = document.createElement('div');
-        coordsElement.className = 'node-coords';
-        coordsElement.textContent = `(${col},${row})`;
-        content.appendChild(coordsElement);
-        
-        cell.appendChild(content);
-        
-        // Re-render Lucide icons
-        if (window.lucide) {
-            lucide.createIcons();
-        }
-    } else {
-        cell.classList.remove('filled', 'fog-of-war');
-        
-        const emptyText = document.createElement('div');
-        emptyText.className = 'empty-node-text';
-        emptyText.textContent = 'Empty Node';
-        cell.appendChild(emptyText);
-        
-        const coordsElement = document.createElement('div');
-        coordsElement.className = 'node-coords';
-        coordsElement.textContent = `(${col},${row})`;
-        cell.appendChild(coordsElement);
     }
-    
-    // Update transition connectors
-    updateTransitionConnectors(col, row);
 }
+
 
 // Professional Passage Text Editor System
 let currentPassageEditor = {
@@ -4562,195 +4358,6 @@ function handleKeyboardShortcuts(e) {
     }
 }
 
-// Enhanced export with new features
-function exportMapEnhanced() {
-    if (mapData.nodes.size === 0) {
-        alert('No nodes to export. Please add some nodes first.');
-        return;
-    }
-    
-    // Find a default start position (first node with data)
-    let defaultStart = null;
-    for (const [key, nodeData] of mapData.nodes) {
-        const [col, row] = key.split(',').map(Number);
-        defaultStart = { x: col, y: row };
-        break;
-    }
-    
-    if (!defaultStart) {
-        alert('No valid nodes found for export.');
-        return;
-    }
-    
-    // Build export data
-    const exportData = {
-        mapId: mapData.name.toLowerCase().replace(/\s+/g, '_'),
-        name: mapData.name,
-        gridSize: {
-            width: mapData.width,
-            height: mapData.height
-        },
-        defaultStart: defaultStart,
-        nodes: [],
-        passageTexts: Object.fromEntries(passageTexts)
-    };
-    
-    // Convert nodes to export format
-    for (const [key, nodeData] of mapData.nodes) {
-        const [col, row] = key.split(',').map(Number);
-        
-        const exportNode = {
-            column: col,
-            row: row,
-            name: nodeData.name || '',
-            passage: nodeData.passage || '',
-            icon: nodeData.icon || '',
-            fogOfWar: nodeData.fogOfWar || false,
-            tags: nodeData.tags || [],
-            style: nodeData.style || {},
-            conditions: nodeData.conditions || [],
-            transitions: {}
-        };
-        
-        // Add transitions for this node (outgoing and incoming)
-        for (const [transitionKey, transitionData] of mapData.transitions) {
-            const [from, to] = transitionKey.split('-');
-            const [fromCol, fromRow] = from.split(',').map(Number);
-            const [toCol, toRow] = to.split(',').map(Number);
-
-            // Determine forward and reverse directions
-            let forwardDir, reverseDir;
-            if (toCol > fromCol) {
-                forwardDir = 'east';
-                reverseDir = 'west';
-            } else if (toCol < fromCol) {
-                forwardDir = 'west';
-                reverseDir = 'east';
-            } else if (toRow > fromRow) {
-                forwardDir = 'south';
-                reverseDir = 'north';
-            } else if (toRow < fromRow) {
-                forwardDir = 'north';
-                reverseDir = 'south';
-            }
-
-            // Outgoing transition from this node
-            if (fromCol === col && fromRow === row && forwardDir) {
-                const trans = {
-                    type: transitionData.type,
-                    conditions: transitionData.conditions || []
-                };
-                if (transitionData.type === 'one-way') {
-                    const dir = transitionData.direction || forwardDir;
-                    trans.direction = dir;
-                }
-                exportNode.transitions[forwardDir] = trans;
-            }
-
-            // Incoming transition to this node
-            if (toCol === col && toRow === row && reverseDir) {
-                const trans = {
-                    type: transitionData.type,
-                    conditions: transitionData.conditions || []
-                };
-                if (transitionData.type === 'one-way') {
-                    const dir = transitionData.direction || forwardDir;
-                    trans.direction = dir;
-                }
-                exportNode.transitions[reverseDir] = trans;
-            }
-        }
-        
-        exportData.nodes.push(exportNode);
-    }
-    
-    // Download JSON file
-    const jsonString = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${exportData.mapId}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    alert('Map exported successfully!');
-}
-
-// Enhanced Twine export with passage texts
-function exportTwineFileEnhanced() {
-    if (mapData.nodes.size === 0) {
-        alert('No nodes to export. Please add some nodes first.');
-        return;
-    }
-    
-    let twContent = '';
-    
-    // Export passage texts
-    for (const [nodeKey, nodeData] of mapData.nodes) {
-        if (nodeData.passage) {
-            const passageData = passageTexts.get(nodeKey);
-            
-            // Main passage
-            twContent += `:: ${nodeData.passage}\n`;
-            if (passageData && passageData.main) {
-                twContent += passageData.main + '\n\n';
-            } else {
-                twContent += `<!-- Auto-generated passage for ${mapData.name} -->\n`;
-                twContent += `<!-- Add your passage content here -->\n\n`;
-            }
-            
-            // Conditional passages
-            if (nodeData.conditions && nodeData.conditions.length > 0) {
-                nodeData.conditions.forEach(condition => {
-                    const conditionPassageName = condition.passage;
-                    twContent += `:: ${conditionPassageName}\n`;
-                    
-                    if (passageData && passageData.conditions[condition.passage]) {
-                        twContent += passageData.conditions[condition.passage] + '\n\n';
-                    } else {
-                        twContent += `<!-- Conditional passage: ${condition.description || 'No description'} -->\n`;
-                        twContent += `<!-- Condition: ${condition.type} "${condition.name}" ${condition.operator} ${condition.value} -->\n`;
-                        twContent += `<!-- Add your conditional passage content here -->\n\n`;
-                    }
-                });
-            }
-        }
-    }
-    
-    // Add a special map data passage
-    twContent += `:: ${mapData.name.replace(/\s+/g, '_')}_MapData\n`;
-    twContent += `<!-- Map data for ${mapData.name} -->\n`;
-    twContent += `<!-- This passage contains the map configuration -->\n\n`;
-    
-    // Download .tw file
-    const blob = new Blob([twContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${mapData.name.toLowerCase().replace(/\s+/g, '_')}_passages.tw`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    const passageCount = Array.from(mapData.nodes.values())
-        .filter(node => node.passage)
-        .reduce((count, node) => count + 1 + (node.conditions ? node.conditions.length : 0), 0);
-    
-    alert(`Twine file exported with ${passageCount} passages!`);
-}
-
-// Replace original functions with enhanced versions
-editNode = editNodeEnhanced;
-saveNode = saveNodeWithFeatures;
-updateCellDisplay = updateCellDisplayEnhanced;
-exportMap = exportMapEnhanced;
-exportTwineFile = exportTwineFileEnhanced;
 
 // NEW: Dynamic Tag Library System
 function setupTagSystemListeners() {
@@ -5155,345 +4762,27 @@ function promptForFilename(defaultName, extension) {
     return sanitized || defaultName;
 }
 
-// Enhanced export functions with prompted naming
-function exportMapWithPrompt() {
-    if (mapData.nodes.size === 0) {
-        alert('No nodes to export. Please add some nodes first.');
-        return;
-    }
-    
-    const defaultFilename = mapData.name.toLowerCase().replace(/\s+/g, '_');
-    const filename = promptForFilename(defaultFilename, 'json');
-    
-    if (filename === null) {
-        return; // User cancelled
-    }
-    
-    // Find a default start position (first node with data)
-    let defaultStart = null;
-    for (const [key, nodeData] of mapData.nodes) {
-        const [col, row] = key.split(',').map(Number);
-        defaultStart = { x: col, y: row };
-        break;
-    }
-    
-    if (!defaultStart) {
-        alert('No valid nodes found for export.');
-        return;
-    }
-    
-    // Build export data
-    const exportData = {
-        mapId: filename,
-        name: mapData.name,
-        gridSize: {
-            width: mapData.width,
-            height: mapData.height
+
+function setNodeData(col, row, options = {}) {
+    const nodeKey = `${col},${row}`;
+    const existingNode = mapData.nodes.get(nodeKey) ?? {};
+
+    mapData.nodes.set(nodeKey, {
+        name: options.name ?? '',
+        passage: options.passage ?? '',
+        icon: options.icon ?? '',
+        fogOfWar: options.fogOfWar ?? false,
+        tags: options.tags ?? [],
+        style: options.style ?? {
+            primaryColor: '#007bff',
+            secondaryColor: '#6c757d',
+            pattern: 'none'
         },
-        defaultStart: defaultStart,
-        nodes: [],
-        passageTexts: Object.fromEntries(passageTexts),
-        projectTagLibrary: Array.from(projectTagLibrary),
-        entryPointRegistry: Object.fromEntries(entryPointRegistry)
-    };
-    
-    // Convert nodes to export format
-    for (const [key, nodeData] of mapData.nodes) {
-        const [col, row] = key.split(',').map(Number);
-        
-        const exportNode = {
-            column: col,
-            row: row,
-            name: nodeData.name || '',
-            passage: nodeData.passage || '',
-            icon: nodeData.icon || '',
-            fogOfWar: nodeData.fogOfWar || false,
-            tags: nodeData.tags || [],
-            style: nodeData.style || {},
-            conditions: nodeData.conditions || [],
-            transitions: {}
-        };
-        
-        // Add transitions for this node (outgoing and incoming)
-        for (const [transitionKey, transitionData] of mapData.transitions) {
-            const [from, to] = transitionKey.split('-');
-            const [fromCol, fromRow] = from.split(',').map(Number);
-            const [toCol, toRow] = to.split(',').map(Number);
-
-            let forwardDir, reverseDir;
-            if (toCol > fromCol) {
-                forwardDir = 'east';
-                reverseDir = 'west';
-            } else if (toCol < fromCol) {
-                forwardDir = 'west';
-                reverseDir = 'east';
-            } else if (toRow > fromRow) {
-                forwardDir = 'south';
-                reverseDir = 'north';
-            } else if (toRow < fromRow) {
-                forwardDir = 'north';
-                reverseDir = 'south';
-            }
-
-            if (fromCol === col && fromRow === row && forwardDir) {
-                const trans = {
-                    type: transitionData.type,
-                    conditions: transitionData.conditions || []
-                };
-                if (transitionData.type === 'one-way') {
-                    const dir = transitionData.direction || forwardDir;
-                    trans.direction = dir;
-                }
-                exportNode.transitions[forwardDir] = trans;
-            }
-
-            if (toCol === col && toRow === row && reverseDir) {
-                const trans = {
-                    type: transitionData.type,
-                    conditions: transitionData.conditions || []
-                };
-                if (transitionData.type === 'one-way') {
-                    const dir = transitionData.direction || forwardDir;
-                    trans.direction = dir;
-                }
-                exportNode.transitions[reverseDir] = trans;
-            }
-        }
-        
-        exportData.nodes.push(exportNode);
-    }
-    
-    // Download JSON file
-    const jsonString = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    alert('Map exported successfully!');
+        conditions: options.conditions ?? [],
+        transitions: options.transitions ?? existingNode.transitions ?? {}
+    });
 }
 
-function exportTwineFileWithPrompt() {
-    if (mapData.nodes.size === 0) {
-        alert('No nodes to export. Please add some nodes first.');
-        return;
-    }
-    
-    const defaultFilename = `${mapData.name.toLowerCase().replace(/\s+/g, '_')}_passages`;
-    const filename = promptForFilename(defaultFilename, 'tw');
-    
-    if (filename === null) {
-        return; // User cancelled
-    }
-    
-    let twContent = '';
-    
-    // Export passage texts
-    for (const [nodeKey, nodeData] of mapData.nodes) {
-        if (nodeData.passage) {
-            const passageData = passageTexts.get(nodeKey);
-            
-            // Main passage
-            twContent += `:: ${nodeData.passage}\n`;
-            if (passageData && passageData.main) {
-                twContent += passageData.main + '\n\n';
-            } else {
-                twContent += `<!-- Auto-generated passage for ${mapData.name} -->\n`;
-                twContent += `<!-- Add your passage content here -->\n\n`;
-            }
-            
-            // Conditional passages
-            if (nodeData.conditions && nodeData.conditions.length > 0) {
-                nodeData.conditions.forEach(condition => {
-                    const conditionPassageName = condition.passage;
-                    twContent += `:: ${conditionPassageName}\n`;
-                    
-                    if (passageData && passageData.conditions[condition.passage]) {
-                        twContent += passageData.conditions[condition.passage] + '\n\n';
-                    } else {
-                        twContent += `<!-- Conditional passage: ${condition.description || 'No description'} -->\n`;
-                        twContent += `<!-- Condition: ${condition.type} "${condition.name}" ${condition.operator} ${condition.value} -->\n`;
-                        twContent += `<!-- Add your conditional passage content here -->\n\n`;
-                    }
-                });
-            }
-        }
-    }
-    
-    // Add a special map data passage
-    twContent += `:: ${mapData.name.replace(/\s+/g, '_')}_MapData\n`;
-    twContent += `<!-- Map data for ${mapData.name} -->\n`;
-    twContent += `<!-- This passage contains the map configuration -->\n\n`;
-    
-    // Download .tw file
-    const blob = new Blob([twContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}.tw`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    const passageCount = Array.from(mapData.nodes.values())
-        .filter(node => node.passage)
-        .reduce((count, node) => count + 1 + (node.conditions ? node.conditions.length : 0), 0);
-    
-    alert(`Twine file exported with ${passageCount} passages!`);
-}
-
-// Enhanced node editing to support new features
-function editNodeWithNewFeatures(col, row) {
-    saveState(`Edit node (${col},${row})`);
-    
-    currentEditingNode = { col, row };
-    currentEditingTransition = null;
-    
-    const nodeKey = `${col},${row}`;
-    
-    // IMPORTANT: Clear the selectedTags Set first to prevent tag bleeding between nodes
-    selectedTags.clear();
-    const loadedFromMemory = loadNodeMemory(col, row);
-    
-    // Try to load from memory first, then from saved data
-    if (!loadedFromMemory) {
-        const nodeData = mapData.nodes.get(nodeKey) || {};
-        
-        // Basic fields
-        document.getElementById('nodeName').value = nodeData.name || '';
-        document.getElementById('passageName').value = nodeData.passage || '';
-        document.getElementById('nodeIcon').value = nodeData.icon || '';
-        document.getElementById('fogOfWar').checked = nodeData.fogOfWar || false;
-        
-        // Load tags into the new system (this will populate selectedTags)
-        loadTagsFromNodeData(nodeData.tags);
-        
-        // Load entry point data
-        loadEntryPointFromNodeData(nodeData);
-        
-        // Style
-        if (nodeData.style) {
-            document.getElementById('nodePrimaryColor').value = nodeData.style.primaryColor || '#007bff';
-            document.getElementById('nodeSecondaryColor').value = nodeData.style.secondaryColor || '#6c757d';
-            document.getElementById('nodePattern').value = nodeData.style.pattern || 'none';
-        } else {
-            document.getElementById('nodePrimaryColor').value = '#007bff';
-            document.getElementById('nodeSecondaryColor').value = '#6c757d';
-            document.getElementById('nodePattern').value = 'none';
-        }
-        
-        updateNodeConditionsList(nodeData.conditions || []);
-        
-        // Update icon selection UI
-        if (nodeData.icon) {
-            updateIconSelection(nodeData.icon);
-        } else {
-            clearIconSelection();
-        }
-    }
-    populateTransitionControls(col, row);
-    
-    // Show node editor
-    document.getElementById('nodeEditor').classList.remove('hidden');
-    document.getElementById('transitionEditor').classList.add('hidden');
-    document.getElementById('sidebarTitle').textContent = `Edit Node (${col},${row})`;
-    document.getElementById('sidebar').classList.remove('hidden');
-}
-
-// Enhanced save node with new features
-function saveNodeWithAllFeatures() {
-    if (!currentEditingNode) return;
-    
-    const { col, row } = currentEditingNode;
-    const nodeKey = `${col},${row}`;
-    
-    const name = document.getElementById('nodeName').value.trim();
-    const passage = document.getElementById('passageName').value.trim();
-    const icon = document.getElementById('nodeIcon').value;
-    const fogOfWar = document.getElementById('fogOfWar').checked;
-    
-    // Get tags from the new system
-    const tags = Array.from(selectedTags);
-    
-    // Get style
-    const style = {
-        primaryColor: document.getElementById('nodePrimaryColor').value,
-        secondaryColor: document.getElementById('nodeSecondaryColor').value,
-        pattern: document.getElementById('nodePattern').value
-    };
-    
-    const conditions = getCurrentNodeConditions();
-    
-    if (name || passage || icon || tags.length > 0) {
-        mapData.nodes.set(nodeKey, {
-            name: name,
-            passage: passage,
-            icon: icon,
-            fogOfWar: fogOfWar,
-            tags: tags,
-            style: style,
-            conditions: conditions
-        });
-        
-        // Update entry point registry
-        const entryTag = tags.find(tag => tag.startsWith('entry-'));
-        if (entryTag) {
-            entryPointRegistry.set(entryTag, nodeKey);
-        }
-    } else {
-        mapData.nodes.delete(nodeKey);
-
-        ['north','west','east','south'].forEach(dir => {
-            const [dx, dy] = directionOffsets[dir];
-            const tCol = col + dx;
-            const tRow = row + dy;
-            const key = `${col},${row}-${tCol},${tRow}`;
-            const revKey = `${tCol},${tRow}-${col},${row}`;
-            mapData.transitions.delete(key);
-            mapData.transitions.delete(revKey);
-        });
-
-        // Remove from entry point registry
-        for (const [type, registeredNodeKey] of entryPointRegistry.entries()) {
-            if (registeredNodeKey === nodeKey) {
-                entryPointRegistry.delete(type);
-            }
-        }
-    }
-    
-    // Clear memory for this node
-    nodeMemory.delete(nodeKey);
-    
-    const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
-    updateCellDisplay(cell, col, row);
-    
-    // Apply styling
-    const nodeData = mapData.nodes.get(nodeKey);
-    if (nodeData) {
-        applyNodeStyling(cell, nodeData);
-    }
-    
-    // Update entry point visuals
-    updateEntryPointVisuals();
-    
-    closeSidebar();
-}
-
-// Replace export functions with prompted versions
-exportMap = exportMapWithPrompt;
-exportTwineFile = exportTwineFileWithPrompt;
-
-// Replace node editing functions with enhanced versions
-editNode = editNodeWithNewFeatures;
-saveNode = saveNodeWithAllFeatures;
 
 // Initialize icon selection when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
