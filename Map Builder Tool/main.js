@@ -424,14 +424,14 @@ function editNode(col, row) {
         document.getElementById('nodeIcon').value = nodeData.icon || '';
         document.getElementById('fogOfWar').checked = nodeData.fogOfWar || false;
 
-        // Tags - support both old (text input) and new (selectedTags)
+        // Tags
         if (typeof loadTagsFromNodeData === 'function') {
             loadTagsFromNodeData(nodeData.tags);
         } else if (document.getElementById('nodeTags')) {
             document.getElementById('nodeTags').value = (nodeData.tags || []).join(', ');
         }
 
-        // Entry point loader (if defined)
+        // Entry point loader
         if (typeof loadEntryPointFromNodeData === 'function') {
             loadEntryPointFromNodeData(nodeData);
         }
@@ -447,25 +447,31 @@ function editNode(col, row) {
             updateNodeConditionsList(nodeData.conditions || []);
         }
 
-        // Icon preview logic
-        if (nodeData.icon && typeof updateIconSelection === 'function') {
-            updateIconSelection(nodeData.icon);
-        } else if (typeof clearIconSelection === 'function') {
-            clearIconSelection();
+        // Robust Icon Handling
+        if (typeof updateIconSelection === 'function' && nodeData.hasOwnProperty('icon')) {
+            const iconValue = nodeData.icon || '';
+            setTimeout(() => {
+                if (iconValue !== '') {
+                    updateIconSelection(iconValue);
+                } else if (typeof clearIconSelection === 'function') {
+                    clearIconSelection();
+                }
+            }, 150); // Small delay ensures Lucide icons can render
         }
     }
 
-    // Transition controls always shown
+    // Transition controls
     if (typeof populateTransitionControls === 'function') {
         populateTransitionControls(col, row);
     }
 
-    // Show editor UI
+    // Show UI
     document.getElementById('nodeEditor').classList.remove('hidden');
     document.getElementById('transitionEditor').classList.add('hidden');
     document.getElementById('sidebarTitle').textContent = `Edit Node (${col},${row})`;
     document.getElementById('sidebar').classList.remove('hidden');
 }
+
 
 
 function editTransition(fromCol, fromRow, toCol, toRow, direction) {
@@ -928,30 +934,28 @@ function toggleTheme() {
     }
 }
 
-function exportMap({ usePrompt = false, includeExtras = false } = {}) {
+function exportMap({ usePrompt = true, includeExtras = false } = {}) {
     if (mapData.nodes.size === 0) {
         alert('No nodes to export. Please add some nodes first.');
         return;
     }
 
-    // Prompt for filename if needed
     const defaultId = mapData.name.toLowerCase().replace(/\s+/g, '_');
     const filename = usePrompt ? promptForFilename(defaultId, 'json') : defaultId;
     if (filename === null) return;
 
-    // Find default start node
     let defaultStart = null;
     for (const [key] of mapData.nodes) {
         const [col, row] = key.split(',').map(Number);
         defaultStart = { x: col, y: row };
         break;
     }
+
     if (!defaultStart) {
         alert('No valid nodes found for export.');
         return;
     }
 
-    // Base export structure
     const exportData = {
         mapId: filename,
         name: mapData.name,
@@ -965,11 +969,10 @@ function exportMap({ usePrompt = false, includeExtras = false } = {}) {
 
     if (includeExtras) {
         exportData.passageTexts = Object.fromEntries(passageTexts);
-        exportData.projectTagLibrary = Array.from(projectTagLibrary || []);
-        exportData.entryPointRegistry = Object.fromEntries(entryPointRegistry || []);
+        exportData.projectTagLibrary = Array.from(projectTagLibrary);
+        exportData.entryPointRegistry = Object.fromEntries(entryPointRegistry);
     }
 
-    // Export all nodes
     for (const [key, nodeData] of mapData.nodes) {
         const [col, row] = key.split(',').map(Number);
         const exportNode = {
@@ -985,7 +988,6 @@ function exportMap({ usePrompt = false, includeExtras = false } = {}) {
             transitions: {}
         };
 
-        // Collect transitions (both outgoing and incoming)
         for (const [transitionKey, transitionData] of mapData.transitions) {
             const [from, to] = transitionKey.split('-');
             const [fromCol, fromRow] = from.split(',').map(Number);
@@ -1023,7 +1025,6 @@ function exportMap({ usePrompt = false, includeExtras = false } = {}) {
         exportData.nodes.push(exportNode);
     }
 
-    // Download as JSON
     const jsonString = JSON.stringify(exportData, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1038,6 +1039,8 @@ function exportMap({ usePrompt = false, includeExtras = false } = {}) {
 
     alert('Map exported successfully!');
 }
+
+
 
 
 // NEW FUNCTIONALITY
@@ -1308,7 +1311,7 @@ function getCurrentNodeConditions() {
 
 
 // Export Twine (.tw) file functionality
-function exportTwineFile({ usePrompt = false, includePassageTexts = false } = {}) {
+function exportTwineFile({ usePrompt = true, includePassageTexts = false } = {}) {
     if (mapData.nodes.size === 0) {
         alert('No nodes to export. Please add some nodes first.');
         return;
@@ -1712,21 +1715,34 @@ function initializeIconSelection() {
         if (window.lucide) {
             lucide.createIcons();
         }
+    }    function selectIcon(iconName) {
+        const nodeIconInput = document.getElementById('nodeIcon');
+
+        // If the clicked icon is already selected, toggle it off
+        if (nodeIconInput?.value === iconName) {
+            clearIconSelection();
+            return;
+        }
+
+        selectIconWithoutToggle(iconName);
     }
 
-    function selectIcon(iconName) {
+    function selectIconWithoutToggle(iconName) {
         selectedIcon = iconName;
 
-        // Update hidden input field
         const nodeIconInput = document.getElementById('nodeIcon');
+
+        // Update hidden input field
         if (nodeIconInput) {
             nodeIconInput.value = iconName;
         }
 
+        // Update visual name
         if (selectedIconName) {
             selectedIconName.textContent = iconName;
         }
 
+        // Update SVG preview
         if (selectedIconSVG) {
             selectedIconSVG.innerHTML = '';
             const iconElement = document.createElement('i');
@@ -1754,6 +1770,7 @@ function initializeIconSelection() {
         }
     }
 
+
     if (iconSearchInput) {
         iconSearchInput.addEventListener('input', (e) => {
             renderIconGrid(e.target.value);
@@ -1761,12 +1778,10 @@ function initializeIconSelection() {
     }
 
     // Initialize the grid on load
-    renderIconGrid();
-
-    // Expose functions globally
+    renderIconGrid();    // Expose functions globally
     window.updateIconSelection = function(iconName) {
         if (iconName && allIcons.includes(iconName)) {
-            selectIcon(iconName);
+            selectIconWithoutToggle(iconName);
         }
     };
 
@@ -1871,25 +1886,33 @@ function initializeConditionIconSelection() {
     }
 
     function selectConditionIcon(iconName) {
+        const nodeConditionIconInput = document.getElementById('nodeConditionIcon');
+
+        // Toggle off if the clicked icon is already selected
+        if (nodeConditionIconInput?.value === iconName) {
+            clearConditionIconSelection();
+            return;
+        }
+
         selectedConditionIcon = iconName;
 
-        // Update hidden input field
-        const nodeConditionIconInput = document.getElementById('nodeConditionIcon');
+        // Update hidden input
         if (nodeConditionIconInput) {
             nodeConditionIconInput.value = iconName;
         }
 
+        // Update text label
         if (selectedConditionIconName) {
             selectedConditionIconName.textContent = iconName;
         }
 
+        // Update SVG preview
         if (selectedConditionIconSVG) {
             selectedConditionIconSVG.innerHTML = '';
             const iconElement = document.createElement('i');
             iconElement.setAttribute('data-lucide', iconName);
             selectedConditionIconSVG.appendChild(iconElement);
 
-            // Re-render Lucide icons
             if (window.lucide) {
                 lucide.createIcons();
             }
@@ -1904,6 +1927,7 @@ function initializeConditionIconSelection() {
             selectedTile.classList.add('selected');
         }
     }
+
 
     if (conditionIconSearchInput) {
         conditionIconSearchInput.addEventListener('input', (e) => {

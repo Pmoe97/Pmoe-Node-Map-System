@@ -243,15 +243,15 @@ header h1 {
 }
 
 .transition-connector.horizontal {
-    width: 32px;
-    height: 12px;
+    width: 24px;
+    height: 8px;
     top: 50%;
     transform: translateY(-50%);
 }
 
 .transition-connector.vertical {
-    width: 12px;
-    height: 32px;
+    width: 8px;
+    height: 24px;
     left: 50%;
     transform: translateX(-50%);
 }
