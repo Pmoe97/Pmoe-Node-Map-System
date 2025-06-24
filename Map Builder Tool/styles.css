@@ -1159,9 +1159,8 @@ header h1 {
 /* Bulk Actions Panel */
 .bulk-actions-panel {
     position: fixed;
-    top: 50%;
+    top: 5vh;
     left: 20px;
-    transform: translateY(-50%);
     background-color: var(--bg-primary);
     border: 2px solid var(--accent-color);
     border-radius: 8px;
@@ -1170,7 +1169,11 @@ header h1 {
     z-index: 1001;
     min-width: 250px;
     max-width: 300px;
+    max-height: 90vh;
+    overflow-y: auto;
 }
+
+
 
 .bulk-actions-header {
     display: flex;

@@ -404,7 +404,10 @@ function updateTransitionConnectors(col, row) {
     });
 }
 
-function editNode(col, row) {
+function editNode(col, row, event) {
+    // If Ctrl (Windows/Linux) or Command (Mac) is held, don't trigger edit panel
+    if (event && (event.ctrlKey || event.metaKey)) return;
+
     saveState(`Edit node (${col},${row})`);
 
     currentEditingNode = { col, row };
@@ -456,7 +459,7 @@ function editNode(col, row) {
                 } else if (typeof clearIconSelection === 'function') {
                     clearIconSelection();
                 }
-            }, 150); // Small delay ensures Lucide icons can render
+            }, 150);
         }
     }
 
@@ -465,7 +468,7 @@ function editNode(col, row) {
         populateTransitionControls(col, row);
     }
 
-    // Show UI
+    // Show editor UI
     document.getElementById('nodeEditor').classList.remove('hidden');
     document.getElementById('transitionEditor').classList.add('hidden');
     document.getElementById('sidebarTitle').textContent = `Edit Node (${col},${row})`;
@@ -583,6 +586,11 @@ function populateTransitionControls(col, row) {
         select.value = value;
     });
 }
+
+function ensureExtension(filename, ext) {
+    return filename.endsWith(`.${ext}`) ? filename : `${filename}.${ext}`;
+}
+
 
 function openDirectionConditions(dir) {
     if (!currentEditingNode) return;
@@ -934,16 +942,13 @@ function toggleTheme() {
     }
 }
 
-function exportMap({ usePrompt = true, includeExtras = false } = {}) {
-    if (mapData.nodes.size === 0) {
-        alert('No nodes to export. Please add some nodes first.');
-        return;
-    }
+// Check for File System Access API support
+function supportsFileSystemAccess() {
+    return 'showSaveFilePicker' in window;
+}
 
-    const defaultId = mapData.name.toLowerCase().replace(/\s+/g, '_');
-    const filename = usePrompt ? promptForFilename(defaultId, 'json') : defaultId;
-    if (filename === null) return;
-
+function prepareExportData(includeExtras = false) {
+    // Determine a default starting node
     let defaultStart = null;
     for (const [key] of mapData.nodes) {
         const [col, row] = key.split(',').map(Number);
@@ -951,13 +956,8 @@ function exportMap({ usePrompt = true, includeExtras = false } = {}) {
         break;
     }
 
-    if (!defaultStart) {
-        alert('No valid nodes found for export.');
-        return;
-    }
-
     const exportData = {
-        mapId: filename,
+        mapId: mapData.name.toLowerCase().replace(/\s+/g, '_'),
         name: mapData.name,
         gridSize: {
             width: mapData.width,
@@ -967,15 +967,17 @@ function exportMap({ usePrompt = true, includeExtras = false } = {}) {
         nodes: []
     };
 
+    // Include optional extras
     if (includeExtras) {
         exportData.passageTexts = Object.fromEntries(passageTexts);
         exportData.projectTagLibrary = Array.from(projectTagLibrary);
         exportData.entryPointRegistry = Object.fromEntries(entryPointRegistry);
     }
 
+    // Convert Map to array of full node objects
     for (const [key, nodeData] of mapData.nodes) {
         const [col, row] = key.split(',').map(Number);
-        const exportNode = {
+        exportData.nodes.push({
             column: col,
             row: row,
             name: nodeData.name || '',
@@ -985,65 +987,66 @@ function exportMap({ usePrompt = true, includeExtras = false } = {}) {
             tags: nodeData.tags || [],
             style: nodeData.style || {},
             conditions: nodeData.conditions || [],
-            transitions: {}
-        };
-
-        for (const [transitionKey, transitionData] of mapData.transitions) {
-            const [from, to] = transitionKey.split('-');
-            const [fromCol, fromRow] = from.split(',').map(Number);
-            const [toCol, toRow] = to.split(',').map(Number);
-
-            let forwardDir, reverseDir;
-            if (toCol > fromCol) [forwardDir, reverseDir] = ['east', 'west'];
-            else if (toCol < fromCol) [forwardDir, reverseDir] = ['west', 'east'];
-            else if (toRow > fromRow) [forwardDir, reverseDir] = ['south', 'north'];
-            else if (toRow < fromRow) [forwardDir, reverseDir] = ['north', 'south'];
-
-            if (fromCol === col && fromRow === row && forwardDir) {
-                const trans = {
-                    type: transitionData.type,
-                    conditions: transitionData.conditions || []
-                };
-                if (transitionData.type === 'one-way') {
-                    trans.direction = transitionData.direction || forwardDir;
-                }
-                exportNode.transitions[forwardDir] = trans;
-            }
-
-            if (toCol === col && toRow === row && reverseDir) {
-                const trans = {
-                    type: transitionData.type,
-                    conditions: transitionData.conditions || []
-                };
-                if (transitionData.type === 'one-way') {
-                    trans.direction = transitionData.direction || forwardDir;
-                }
-                exportNode.transitions[reverseDir] = trans;
-            }
-        }
-
-        exportData.nodes.push(exportNode);
+            transitions: nodeData.transitions || {}
+        });
     }
 
+    return exportData;
+}
+
+
+// Full exportMap function with modern file picker and fallback
+async function exportMap({ usePrompt = true, includeExtras = false } = {}) {
+    if (mapData.nodes.size === 0) {
+        alert('No nodes to export. Please create some nodes first.');
+        return;
+    }
+
+    const exportData = prepareExportData(includeExtras);
     const jsonString = JSON.stringify(exportData, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+
+    const defaultFilename = mapData.name.toLowerCase().replace(/\s+/g, '_') + '.json';
+
+    if (supportsFileSystemAccess()) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: defaultFilename,
+                types: [{
+                    description: 'JSON Files',
+                    accept: { 'application/json': ['.json'] }
+                }]
+            });
+
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+
+            alert('Map exported successfully!');
+            return;
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('Error using File System Access API:', err);
+            }
+        }
+    }
+
+    const filename = usePrompt
+        ? promptForFilename(mapData.name.toLowerCase().replace(/\s+/g, '_'), 'json')
+        : defaultFilename;
+    if (filename === null) return;
 
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}.json`;
+    a.href = URL.createObjectURL(blob);
+    a.download = ensureExtension(filename, 'json');
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
 
     alert('Map exported successfully!');
 }
 
-
-
-
-// NEW FUNCTIONALITY
 
 // Import map functionality
 function importMap() {
@@ -1310,71 +1313,51 @@ function getCurrentNodeConditions() {
 }
 
 
-// Export Twine (.tw) file functionality
-function exportTwineFile({ usePrompt = true, includePassageTexts = false } = {}) {
-    if (mapData.nodes.size === 0) {
-        alert('No nodes to export. Please add some nodes first.');
-        return;
-    }
+// Full exportTwineFile function using modern file picker with fallback
+async function exportTwineFile() {
+    const twineContent = generateTwineContent();
+    if (!twineContent) return;
 
-    const defaultFilename = `${mapData.name.toLowerCase().replace(/\s+/g, '_')}_passages`;
-    const filename = usePrompt ? promptForFilename(defaultFilename, 'tw') : defaultFilename;
-    if (filename === null) return;
+    const blob = new Blob([twineContent], { type: 'text/plain' });
+    const defaultFilename = mapData.name.toLowerCase().replace(/\s+/g, '_') + '.tw';
 
-    let twContent = '';
-    let passageCount = 0;
+    if (supportsFileSystemAccess()) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: defaultFilename,
+                types: [{
+                    description: 'Twine Files',
+                    accept: { 'text/plain': ['.tw'] }
+                }]
+            });
 
-    for (const [nodeKey, nodeData] of mapData.nodes) {
-        if (!nodeData.passage) continue;
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
 
-        const passageData = passageTexts.get(nodeKey);
-
-        // Main passage
-        twContent += `:: ${nodeData.passage}\n`;
-        if (includePassageTexts && passageData?.main) {
-            twContent += passageData.main + '\n\n';
-        } else {
-            twContent += `<!-- Auto-generated passage for ${mapData.name} -->\n`;
-            twContent += `<!-- Add your passage content here -->\n\n`;
-        }
-        passageCount++;
-
-        // Conditional passages
-        if (nodeData.conditions?.length > 0) {
-            for (const condition of nodeData.conditions) {
-                const condPassage = condition.passage;
-                twContent += `:: ${condPassage}\n`;
-
-                if (includePassageTexts && passageData?.conditions?.[condPassage]) {
-                    twContent += passageData.conditions[condPassage] + '\n\n';
-                } else {
-                    twContent += `<!-- Conditional passage: ${condition.description || 'No description'} -->\n`;
-                    twContent += `<!-- Condition: ${condition.type} "${condition.name}" ${condition.operator} ${condition.value} -->\n`;
-                    twContent += `<!-- Add your conditional passage content here -->\n\n`;
-                }
-                passageCount++;
+            alert('Twine file exported successfully!');
+            return;
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('Error using File System Access API:', err);
             }
         }
     }
 
-    // Map metadata passage
-    twContent += `:: ${mapData.name.replace(/\s+/g, '_')}_MapData\n`;
-    twContent += `<!-- Map data for ${mapData.name} -->\n`;
-    twContent += `<!-- This passage contains the map configuration -->\n\n`;
+    const filename = promptForFilename(mapData.name.toLowerCase().replace(/\s+/g, '_'), 'tw');
+    if (filename === null) return;
 
-    // Download the .tw file
-    const blob = new Blob([twContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}.tw`;
+    a.href = URL.createObjectURL(blob);
+    a.download = ensureExtension(filename, 'tw');
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
 
-    alert(`Twine file exported with ${passageCount} passages!`);
+    alert('Twine file exported successfully!');
 }
+
 
 
 // Auto-save functionality
@@ -2508,8 +2491,50 @@ function setupNavigationListeners() {
     mapGrid.addEventListener('mousemove', handleSelectionMove);
     mapGrid.addEventListener('mouseup', handleSelectionEnd);
     
+    // NEW: Add click handler to all grid cells for Ctrl+Click selection
+    setupCellClickHandlers();
+    
     // Apply initial transform
     updateMapTransform();
+}
+
+function setupCellClickHandlers() {
+    const cells = document.querySelectorAll('.grid-cell');
+    cells.forEach(cell => {
+        cell.addEventListener('click', handleCellClick);
+    });
+}
+
+function handleCellClick(e) {
+    // Don't interfere with normal editing if not holding Ctrl
+    if (!e.ctrlKey && !e.metaKey) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const cell = e.currentTarget;
+    const col = parseInt(cell.dataset.col);
+    const row = parseInt(cell.dataset.row);
+    const nodeKey = `${col},${row}`;
+    
+    if (navigationState.selectedNodes.has(nodeKey)) {
+        // Deselect if already selected
+        navigationState.selectedNodes.delete(nodeKey);
+        cell.classList.remove('selected');
+    } else {
+        // Select the node
+        navigationState.selectedNodes.add(nodeKey);
+        cell.classList.add('selected');
+    }
+    
+    updateBulkActionsUI();
+    
+    // Show bulk actions if nodes are selected
+    if (navigationState.selectedNodes.size > 0) {
+        showBulkActionsPanel();
+    } else {
+        hideBulkActionsPanel();
+    }
 }
 
 function handlePanStart(e) {
@@ -2764,6 +2789,7 @@ function showBulkActionsPanel() {
     }
     panel.classList.remove('hidden');
     updateBulkActionsUI();
+    updateBulkTagRemovalOptions(); // NEW: Update tag options when panel shows
 }
 
 function hideBulkActionsPanel() {
@@ -2789,7 +2815,29 @@ function createBulkActionsPanel() {
                 <h4>Node Actions</h4>
                 <button id="bulkDeleteNodes" class="bulk-action-btn danger">Delete Selected Nodes</button>
                 <button id="bulkToggleFog" class="bulk-action-btn">Toggle Fog of War</button>
+                <button id="bulkCopyNodes" class="bulk-action-btn">Copy Selected</button>
+                <button id="bulkDeleteNodes" class="bulk-action-btn">Clear Node Data</button>
             </div>
+            
+            <div class="bulk-action-group">
+                <h4>Tag Management</h4>
+                <div class="bulk-tag-input-group">
+                    <input type="text" id="bulkTagInput" placeholder="Enter tags to add (comma-separated)">
+                    <button id="bulkAddTags" class="bulk-action-btn">Add Tags</button>
+                </div>
+                <div class="bulk-tag-remove-group">
+                    <select id="bulkRemoveTagSelect">
+                        <option value="">Select tag to remove...</option>
+                    </select>
+                    <button id="bulkRemoveTags" class="bulk-action-btn">Remove Tag</button>
+                </div>
+            </div>
+            
+            <div class="bulk-action-group">
+                <h4>Style Settings</h4>
+                <button id="bulkOpenStyleModal" class="bulk-action-btn">Edit Styles</button>
+            </div>
+            
             <div class="bulk-action-group">
                 <h4>Transition Actions</h4>
                 <label for="bulkTransitionType">Set transition type:</label>
@@ -2802,6 +2850,13 @@ function createBulkActionsPanel() {
                 </select>
                 <button id="applyBulkTransitions" class="bulk-action-btn">Apply to Selection</button>
             </div>
+            
+            <div class="bulk-action-group">
+                <h4>Quick Actions</h4>
+                <button id="bulkSelectConnected" class="bulk-action-btn">Select Connected</button>
+                <button id="bulkSelectPath" class="bulk-action-btn">Select Path</button>
+                <button id="bulkInvertSelection" class="bulk-action-btn">Invert Selection</button>
+            </div>
         </div>
     `;
     
@@ -2809,7 +2864,24 @@ function createBulkActionsPanel() {
     panel.querySelector('#clearSelection').addEventListener('click', clearSelection);
     panel.querySelector('#bulkDeleteNodes').addEventListener('click', bulkDeleteNodes);
     panel.querySelector('#bulkToggleFog').addEventListener('click', bulkToggleFog);
+    panel.querySelector('#bulkCopyNodes').addEventListener('click', bulkCopyNodes);
+    panel.querySelector('#bulkDeleteNodes').addEventListener('click', bulkDeleteNodes);
     panel.querySelector('#applyBulkTransitions').addEventListener('click', applyBulkTransitions);
+    
+    // NEW: Tag management listeners
+    panel.querySelector('#bulkAddTags').addEventListener('click', bulkAddTags);
+    panel.querySelector('#bulkRemoveTags').addEventListener('click', bulkRemoveTags);
+    panel.querySelector('#bulkTagInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') bulkAddTags();
+    });
+    
+    // NEW: Style editor listener
+    panel.querySelector('#bulkOpenStyleModal').addEventListener('click', openBulkStyleModal);
+    
+    // NEW: Quick action listeners
+    panel.querySelector('#bulkSelectConnected').addEventListener('click', bulkSelectConnected);
+    panel.querySelector('#bulkSelectPath').addEventListener('click', bulkSelectPath);
+    panel.querySelector('#bulkInvertSelection').addEventListener('click', bulkInvertSelection);
     
     document.body.appendChild(panel);
     return panel;
@@ -2822,16 +2894,484 @@ function updateBulkActionsUI() {
     }
 }
 
-function bulkDeleteNodes() {
+function bulkAddTags() {
+    const input = document.getElementById('bulkTagInput');
+    const tagsToAdd = input.value.trim().split(',').map(tag => tag.trim()).filter(tag => tag);
+    
+    if (tagsToAdd.length === 0) {
+        alert('Please enter at least one tag to add.');
+        return;
+    }
+    
+    let updatedCount = 0;
+    
+    navigationState.selectedNodes.forEach(nodeKey => {
+        const nodeData = mapData.nodes.get(nodeKey);
+        if (nodeData) {
+            // Ensure tags array exists
+            if (!nodeData.tags) nodeData.tags = [];
+            
+            // Add new tags without duplicating
+            tagsToAdd.forEach(tag => {
+                if (!nodeData.tags.includes(tag)) {
+                    nodeData.tags.push(tag);
+                    projectTagLibrary.add(tag); // Add to project library
+                }
+            });
+            
+            updatedCount++;
+            
+            // Update cell display
+            const [col, row] = nodeKey.split(',').map(Number);
+            const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
+            if (cell) {
+                updateCellDisplay(cell, col, row);
+            }
+        }
+    });
+    
+    // Clear input
+    input.value = '';
+    
+    // Update tag removal dropdown
+    updateBulkTagRemovalOptions();
+    
+    alert(`Added tags to ${updatedCount} nodes.`);
+}
+
+function bulkRemoveTags() {
+    const select = document.getElementById('bulkRemoveTagSelect');
+    const tagToRemove = select.value;
+    
+    if (!tagToRemove) {
+        alert('Please select a tag to remove.');
+        return;
+    }
+    
+    let updatedCount = 0;
+    
+    navigationState.selectedNodes.forEach(nodeKey => {
+        const nodeData = mapData.nodes.get(nodeKey);
+        if (nodeData && nodeData.tags) {
+            const index = nodeData.tags.indexOf(tagToRemove);
+            if (index > -1) {
+                nodeData.tags.splice(index, 1);
+                updatedCount++;
+                
+                // Update cell display
+                const [col, row] = nodeKey.split(',').map(Number);
+                const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
+                if (cell) {
+                    updateCellDisplay(cell, col, row);
+                }
+            }
+        }
+    });
+    
+    // Reset selection
+    select.value = '';
+    
+    // Update options
+    updateBulkTagRemovalOptions();
+    
+    alert(`Removed tag "${tagToRemove}" from ${updatedCount} nodes.`);
+}
+
+function updateBulkTagRemovalOptions() {
+    const select = document.getElementById('bulkRemoveTagSelect');
+    if (!select) return;
+    
+    // Collect all unique tags from selected nodes
+    const allTags = new Set();
+    
+    navigationState.selectedNodes.forEach(nodeKey => {
+        const nodeData = mapData.nodes.get(nodeKey);
+        if (nodeData && nodeData.tags) {
+            nodeData.tags.forEach(tag => allTags.add(tag));
+        }
+    });
+    
+    // Update select options
+    select.innerHTML = '<option value="">Select tag to remove...</option>';
+    
+    Array.from(allTags).sort().forEach(tag => {
+        const option = document.createElement('option');
+        option.value = tag;
+        option.textContent = tag;
+        select.appendChild(option);
+    });
+}
+
+function openBulkStyleModal() {
+    createBulkStyleModal();
+    document.getElementById('bulkStyleModal').classList.remove('hidden');
+    
+    // Initialize with common values or defaults
+    initializeBulkStyleModal();
+}
+
+function createBulkStyleModal() {
+    if (document.getElementById('bulkStyleModal')) return;
+    
+    const modal = document.createElement('div');
+    modal.id = 'bulkStyleModal';
+    modal.className = 'modal hidden';
+    
+    modal.innerHTML = `
+        <div class="modal-content bulk-style-modal">
+            <div class="modal-header">
+                <h2>Bulk Style Editor</h2>
+                <span id="bulkStyleCount" class="style-count">Editing 0 nodes</span>
+            </div>
+            
+            <div class="bulk-style-form">
+                <div class="form-group">
+                    <label>Icon Selection</label>
+                    <div class="icon-selector-bulk">
+                        <input type="hidden" id="bulkNodeIcon" value="">
+                        <div class="selected-icon-display">
+                            <div id="bulkSelectedIconSVG"></div>
+                            <span id="bulkSelectedIconName">No Icon Selected</span>
+                        </div>
+                        <button type="button" id="bulkClearIcon" class="clear-icon-btn">Clear Icon</button>
+                    </div>
+                    <input type="text" id="bulkIconSearch" placeholder="Search icons..." class="icon-search">
+                    <div id="bulkIconGrid" class="icon-grid"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="bulkPrimaryColor">Primary Color</label>
+                    <div class="color-input-group">
+                        <input type="color" id="bulkPrimaryColor" value="#007bff">
+                        <div class="color-presets">
+                            <div class="color-preset" data-color="#007bff" style="background-color: #007bff"></div>
+                            <div class="color-preset" data-color="#28a745" style="background-color: #28a745"></div>
+                            <div class="color-preset" data-color="#dc3545" style="background-color: #dc3545"></div>
+                            <div class="color-preset" data-color="#ffc107" style="background-color: #ffc107"></div>
+                            <div class="color-preset" data-color="#17a2b8" style="background-color: #17a2b8"></div>
+                            <div class="color-preset" data-color="#6610f2" style="background-color: #6610f2"></div>
+                            <div class="color-preset" data-color="#e83e8c" style="background-color: #e83e8c"></div>
+                            <div class="color-preset" data-color="#fd7e14" style="background-color: #fd7e14"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="bulkSecondaryColor">Secondary Color</label>
+                    <div class="color-input-group">
+                        <input type="color" id="bulkSecondaryColor" value="#6c757d">
+                        <div class="color-presets">
+                            <div class="color-preset" data-color="#6c757d" style="background-color: #6c757d"></div>
+                            <div class="color-preset" data-color="#343a40" style="background-color: #343a40"></div>
+                            <div class="color-preset" data-color="#f8f9fa" style="background-color: #f8f9fa"></div>
+                            <div class="color-preset" data-color="#e9ecef" style="background-color: #e9ecef"></div>
+                            <div class="color-preset" data-color="#dee2e6" style="background-color: #dee2e6"></div>
+                            <div class="color-preset" data-color="#ced4da" style="background-color: #ced4da"></div>
+                            <div class="color-preset" data-color="#adb5bd" style="background-color: #adb5bd"></div>
+                            <div class="color-preset" data-color="#868e96" style="background-color: #868e96"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="bulkPattern">Pattern</label>
+                    <select id="bulkPattern">
+                        <option value="none">None</option>
+                        <option value="diagonal-stripes">Diagonal Stripes</option>
+                        <option value="vertical-stripes">Vertical Stripes</option>
+                        <option value="horizontal-stripes">Horizontal Stripes</option>
+                        <option value="dots">Dots</option>
+                        <option value="grid">Grid</option>
+                        <option value="checkerboard">Checkerboard</option>
+                    </select>
+                </div>
+                
+                <div class="form-group preview-group">
+                    <label>Preview</label>
+                    <div id="bulkStylePreview" class="bulk-style-preview">
+                        <div class="preview-node">
+                            <div class="node-content">
+                                <i id="previewIcon" data-lucide="help-circle"></i>
+                                <div class="node-name">Sample Node</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button id="applyBulkStyles" class="primary-btn">Apply to Selected</button>
+                <button id="cancelBulkStyles" class="secondary-btn">Cancel</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Setup event listeners
+    setupBulkStyleModalListeners();
+}
+
+function setupBulkStyleModalListeners() {
+    // Icon search and selection
+    const iconSearch = document.getElementById('bulkIconSearch');
+    iconSearch.addEventListener('input', (e) => {
+        renderBulkIconGrid(e.target.value);
+    });
+    
+    // Clear icon button
+    document.getElementById('bulkClearIcon').addEventListener('click', () => {
+        clearBulkIconSelection();
+        updateBulkStylePreview();
+    });
+    
+    // Color preset handlers
+    document.querySelectorAll('#bulkStyleModal .color-preset').forEach(preset => {
+        preset.addEventListener('click', function() {
+            const color = this.dataset.color;
+            const input = this.closest('.color-input-group').querySelector('input[type="color"]');
+            input.value = color;
+            
+            // Update preset selection
+            this.parentNode.querySelectorAll('.color-preset').forEach(p => p.classList.remove('selected'));
+            this.classList.add('selected');
+            
+            updateBulkStylePreview();
+        });
+    });
+    
+    // Color input changes
+    document.getElementById('bulkPrimaryColor').addEventListener('change', updateBulkStylePreview);
+    document.getElementById('bulkSecondaryColor').addEventListener('change', updateBulkStylePreview);
+    document.getElementById('bulkPattern').addEventListener('change', updateBulkStylePreview);
+    
+    // Action buttons
+    document.getElementById('applyBulkStyles').addEventListener('click', applyBulkStyles);
+    document.getElementById('cancelBulkStyles').addEventListener('click', closeBulkStyleModal);
+}
+
+function initializeBulkStyleModal() {
+    // Update count
+    document.getElementById('bulkStyleCount').textContent = `Editing ${navigationState.selectedNodes.size} nodes`;
+    
+    // Initialize icon grid
+    renderBulkIconGrid('');
+    
+    // Set defaults or common values
+    // You could analyze selected nodes for common values here
+    updateBulkStylePreview();
+}
+
+function renderBulkIconGrid(filter = '') {
+    const iconGrid = document.getElementById('bulkIconGrid');
+    if (!iconGrid) return;
+    
+    iconGrid.innerHTML = '';
+    
+    // Get all available icons
+    let allIcons = [];
+    if (window.lucide && window.lucide.icons) {
+        allIcons = Object.keys(window.lucide.icons)
+            .map(name => name.replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+                           .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
+                           .toLowerCase())
+            .sort();
+    } else {
+        allIcons = ['home', 'store', 'sword', 'shield', 'key', 'door-open', 'door-closed'];
+    }
+    
+    const filteredIcons = allIcons.filter(icon => 
+        icon.toLowerCase().includes(filter.toLowerCase())
+    ).slice(0, 50); // Limit for performance
+    
+    filteredIcons.forEach(iconName => {
+        const tile = document.createElement('div');
+        tile.className = 'icon-tile';
+        tile.setAttribute('data-icon', iconName);
+        
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'icon-preview';
+        const iconElement = document.createElement('i');
+        iconElement.setAttribute('data-lucide', iconName);
+        iconDiv.appendChild(iconElement);
+        
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'icon-name';
+        nameDiv.textContent = iconName;
+        
+        tile.appendChild(iconDiv);
+        tile.appendChild(nameDiv);
+        tile.addEventListener('click', () => selectBulkIcon(iconName));
+        iconGrid.appendChild(tile);
+    });
+    
+    // Re-render Lucide icons
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+}
+
+function selectBulkIcon(iconName) {
+    const iconInput = document.getElementById('bulkNodeIcon');
+    const selectedIconName = document.getElementById('bulkSelectedIconName');
+    const selectedIconSVG = document.getElementById('bulkSelectedIconSVG');
+    
+    iconInput.value = iconName;
+    selectedIconName.textContent = iconName;
+    
+    selectedIconSVG.innerHTML = '';
+    const iconElement = document.createElement('i');
+    iconElement.setAttribute('data-lucide', iconName);
+    selectedIconSVG.appendChild(iconElement);
+    
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+    
+    // Highlight selected
+    document.querySelectorAll('#bulkIconGrid .icon-tile').forEach(tile => {
+        tile.classList.toggle('selected', tile.dataset.icon === iconName);
+    });
+    
+    updateBulkStylePreview();
+}
+
+function clearBulkIconSelection() {
+    document.getElementById('bulkNodeIcon').value = '';
+    document.getElementById('bulkSelectedIconName').textContent = 'No Icon Selected';
+    document.getElementById('bulkSelectedIconSVG').innerHTML = '';
+    
+    document.querySelectorAll('#bulkIconGrid .icon-tile').forEach(tile => {
+        tile.classList.remove('selected');
+    });
+}
+
+function updateBulkStylePreview() {
+    const preview = document.querySelector('#bulkStylePreview .preview-node');
+    const icon = document.getElementById('bulkNodeIcon').value;
+    const primaryColor = document.getElementById('bulkPrimaryColor').value;
+    const secondaryColor = document.getElementById('bulkSecondaryColor').value;
+    const pattern = document.getElementById('bulkPattern').value;
+    
+    // Apply styles
+    preview.style.backgroundColor = primaryColor;
+    preview.style.setProperty('--node-primary-color', primaryColor);
+    preview.style.setProperty('--node-secondary-color', secondaryColor);
+    
+    // Remove old pattern classes
+    preview.classList.remove(
+        'node-pattern-diagonal-stripes', 'node-pattern-vertical-stripes',
+        'node-pattern-horizontal-stripes', 'node-pattern-dots',
+        'node-pattern-grid', 'node-pattern-checkerboard'
+    );
+    
+    // Apply pattern
+    if (pattern !== 'none') {
+        preview.classList.add(`node-pattern-${pattern}`);
+    }
+    
+    // Update icon
+    const iconElement = preview.querySelector('i');
+    if (icon) {
+        iconElement.setAttribute('data-lucide', icon);
+    } else {
+        iconElement.setAttribute('data-lucide', 'help-circle');
+    }
+    
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+}
+
+function applyBulkStyles() {
+    const icon = document.getElementById('bulkNodeIcon').value;
+    const primaryColor = document.getElementById('bulkPrimaryColor').value;
+    const secondaryColor = document.getElementById('bulkSecondaryColor').value;
+    const pattern = document.getElementById('bulkPattern').value;
+    
+    let updatedCount = 0;
+    
+    navigationState.selectedNodes.forEach(nodeKey => {
+        const nodeData = mapData.nodes.get(nodeKey);
+        if (nodeData) {
+            // Update icon if one was selected
+            if (icon) {
+                nodeData.icon = icon;
+            }
+            
+            // Update style
+            if (!nodeData.style) nodeData.style = {};
+            nodeData.style.primaryColor = primaryColor;
+            nodeData.style.secondaryColor = secondaryColor;
+            nodeData.style.pattern = pattern;
+            
+            updatedCount++;
+            
+            // Update cell display
+            const [col, row] = nodeKey.split(',').map(Number);
+            const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
+            if (cell) {
+                updateCellDisplay(cell, col, row);
+                applyNodeStyling(cell, nodeData);
+            }
+        }
+    });
+    
+    closeBulkStyleModal();
+    alert(`Updated styles for ${updatedCount} nodes.`);
+}
+
+function closeBulkStyleModal() {
+    document.getElementById('bulkStyleModal').classList.add('hidden');
+}
+
+// NEW: Additional bulk selection functions
+function bulkCopyNodes() {
     if (navigationState.selectedNodes.size === 0) return;
     
-    const confirmed = confirm(`Delete ${navigationState.selectedNodes.size} selected nodes? This action cannot be undone.`);
-    if (!confirmed) return;
-    
-    // Delete nodes and their transitions
+    // Store copied nodes data
+    const copiedNodes = [];
     navigationState.selectedNodes.forEach(nodeKey => {
-        mapData.nodes.delete(nodeKey);
-        
+        const nodeData = mapData.nodes.get(nodeKey);
+        if (nodeData) {
+            const [col, row] = nodeKey.split(',').map(Number);
+            copiedNodes.push({
+                col, row,
+                data: JSON.parse(JSON.stringify(nodeData)) // Deep copy
+            });
+        }
+    });
+    
+    // Store in clipboard (you could enhance this with actual clipboard API)
+    window.copiedMapNodes = copiedNodes;
+    alert(`Copied ${copiedNodes.length} nodes. Use Ctrl+V on an empty area to paste.`);
+}
+
+function bulkDeleteNodes() {
+    if (navigationState.selectedNodes.size === 0) return;
+
+    const confirmed = confirm(`Clear data from ${navigationState.selectedNodes.size} selected nodes? The nodes will remain but all their content and transitions will be erased.`);
+    if (!confirmed) return;
+
+    navigationState.selectedNodes.forEach(nodeKey => {
+        const [col, row] = nodeKey.split(',').map(Number);
+
+        // Reset node data (but keep the node object in place)
+        mapData.nodes.set(nodeKey, {
+            name: '',
+            passage: '',
+            icon: '',
+            fogOfWar: false,
+            tags: [],
+            style: {
+                primaryColor: '#007bff',
+                secondaryColor: '#6c757d',
+                pattern: 'none'
+            },
+            conditions: [],
+            transitions: {}
+        });
+
         // Remove all transitions involving this node
         const transitionsToRemove = [];
         for (const [key, transition] of mapData.transitions) {
@@ -2841,22 +3381,160 @@ function bulkDeleteNodes() {
             }
         }
         transitionsToRemove.forEach(key => mapData.transitions.delete(key));
-        
+
         // Update cell display
-        const [col, row] = nodeKey.split(',').map(Number);
         const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
         if (cell) {
             updateCellDisplay(cell, col, row);
         }
     });
-    
-    // Update surrounding cells to refresh transition connectors
+
+    // Refresh surrounding visuals
     navigationState.selectedNodes.forEach(nodeKey => {
         const [col, row] = nodeKey.split(',').map(Number);
         updateSurroundingCells(col, row);
     });
-    
+
     clearSelection();
+    alert(`Cleared ${navigationState.selectedNodes.size} nodes.`);
+}
+
+function bulkSelectConnected() {
+    if (navigationState.selectedNodes.size === 0) return;
+    
+    const connected = new Set(navigationState.selectedNodes);
+    const toCheck = Array.from(navigationState.selectedNodes);
+    
+    while (toCheck.length > 0) {
+        const current = toCheck.pop();
+        const [col, row] = current.split(',').map(Number);
+        
+        // Check all four directions
+        const neighbors = [
+            `${col+1},${row}`, `${col-1},${row}`,
+            `${col},${row+1}`, `${col},${row-1}`
+        ];
+        
+        neighbors.forEach(neighbor => {
+            if (!connected.has(neighbor)) {
+                // Check if there's a transition between current and neighbor
+                const transitionKey1 = `${current}-${neighbor}`;
+                const transitionKey2 = `${neighbor}-${current}`;
+                
+                if (mapData.transitions.has(transitionKey1) || mapData.transitions.has(transitionKey2)) {
+                    connected.add(neighbor);
+                    toCheck.push(neighbor);
+                }
+            }
+        });
+    }
+    
+    // Update selection
+    navigationState.selectedNodes = connected;
+    
+    // Update visual selection
+    document.querySelectorAll('.grid-cell').forEach(cell => {
+        const nodeKey = `${cell.dataset.col},${cell.dataset.row}`;
+        cell.classList.toggle('selected', navigationState.selectedNodes.has(nodeKey));
+    });
+    
+    updateBulkActionsUI();
+}
+
+function bulkSelectPath() {
+    if (navigationState.selectedNodes.size !== 2) {
+        alert('Please select exactly 2 nodes to find a path between them.');
+        return;
+    }
+    
+    const nodes = Array.from(navigationState.selectedNodes);
+    const start = nodes[0];
+    const end = nodes[1];
+    
+    // Simple pathfinding (BFS)
+    const path = findPath(start, end);
+    
+    if (path) {
+        navigationState.selectedNodes = new Set(path);
+        
+        // Update visual selection
+        document.querySelectorAll('.grid-cell').forEach(cell => {
+            const nodeKey = `${cell.dataset.col},${cell.dataset.row}`;
+            cell.classList.toggle('selected', navigationState.selectedNodes.has(nodeKey));
+        });
+        
+        updateBulkActionsUI();
+    } else {
+        alert('No path found between the selected nodes.');
+    }
+}
+
+function findPath(start, end) {
+    const queue = [[start]];
+    const visited = new Set([start]);
+    
+    while (queue.length > 0) {
+        const path = queue.shift();
+        const current = path[path.length - 1];
+        
+        if (current === end) {
+            return path;
+        }
+        
+        const [col, row] = current.split(',').map(Number);
+        const neighbors = [
+            `${col+1},${row}`, `${col-1},${row}`,
+            `${col},${row+1}`, `${col},${row-1}`
+        ];
+        
+        for (const neighbor of neighbors) {
+            if (!visited.has(neighbor)) {
+                // Check if there's a transition
+                const transitionKey1 = `${current}-${neighbor}`;
+                const transitionKey2 = `${neighbor}-${current}`;
+                
+                if (mapData.transitions.has(transitionKey1) || mapData.transitions.has(transitionKey2)) {
+                    visited.add(neighbor);
+                    queue.push([...path, neighbor]);
+                }
+            }
+        }
+    }
+    
+    return null;
+}
+
+function bulkInvertSelection() {
+    const allNodeKeys = new Set();
+    
+    // Get all nodes with data
+    for (const nodeKey of mapData.nodes.keys()) {
+        allNodeKeys.add(nodeKey);
+    }
+    
+    // Invert selection
+    const newSelection = new Set();
+    allNodeKeys.forEach(nodeKey => {
+        if (!navigationState.selectedNodes.has(nodeKey)) {
+            newSelection.add(nodeKey);
+        }
+    });
+    
+    navigationState.selectedNodes = newSelection;
+    
+    // Update visual selection
+    document.querySelectorAll('.grid-cell').forEach(cell => {
+        const nodeKey = `${cell.dataset.col},${cell.dataset.row}`;
+        cell.classList.toggle('selected', navigationState.selectedNodes.has(nodeKey));
+    });
+    
+    updateBulkActionsUI();
+    
+    if (navigationState.selectedNodes.size > 0) {
+        showBulkActionsPanel();
+    } else {
+        hideBulkActionsPanel();
+    }
 }
 
 function bulkToggleFog() {
@@ -4761,30 +5439,36 @@ function loadEntryPointFromNodeData(nodeData) {
     }
 }
 
-// NEW: Prompted File Naming for Exports
+// Prompted File Naming for Exports
 function promptForFilename(defaultName, extension) {
+    // Only use prompt fallback if File System Access API is not supported
+    if (supportsFileSystemAccess()) return defaultName;
+
+    const lastUsedKey = `last-export-${mapData.name}-${extension}`;
+    const lastUsed = localStorage.getItem(lastUsedKey);
+
     const filename = window.prompt(
         `Enter a filename for your ${extension.toUpperCase()} export:`,
-        defaultName
+        lastUsed || defaultName
     );
-    
+
     if (filename === null) {
         return null; // User cancelled
     }
-    
-    if (filename.trim() === '') {
-        return defaultName; // Use default if empty
-    }
-    
-    // Sanitize filename
-    const sanitized = filename.trim()
-        .replace(/[<>:"/\\|?*]/g, '_') // Replace invalid characters
-        .replace(/\s+/g, '_') // Replace spaces with underscores
-        .replace(/_{2,}/g, '_') // Replace multiple underscores with single
-        .replace(/^_+|_+$/g, ''); // Remove leading/trailing underscores
-    
-    return sanitized || defaultName;
+
+    const trimmed = filename.trim();
+    const sanitized = trimmed
+        .replace(/[<>:"/\\|?*]/g, '_')
+        .replace(/\s+/g, '_')
+        .replace(/_{2,}/g, '_')
+        .replace(/^_+|_+$/g, '');
+
+    const finalName = sanitized || defaultName;
+
+    localStorage.setItem(lastUsedKey, finalName);
+    return finalName;
 }
+
 
 
 function setNodeData(col, row, options = {}) {
