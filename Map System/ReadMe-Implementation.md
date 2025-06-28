@@ -878,3 +878,4 @@ For additional support or advanced customization, refer to the source code comme
 **Compatible with**: Twine 2.3+, SugarCube 2.30+  
 **Dependencies**: Lucide Icons (CDN), jQuery (included with SugarCube)  
 **License**: Free for any use
+

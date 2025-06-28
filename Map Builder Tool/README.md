@@ -12,6 +12,7 @@ A local web-based map editor for creating structured map data for Twine 2 / Suga
 - **Dual Export System**: Generate both JSON map files and Twine .tw passage files
 - **Import/Export**: Load existing maps for editing and export in multiple formats
 
+
 ### User Experience Enhancements
 - **Node Memory**: Unsaved changes persist when switching between nodes
 - **Auto-save**: Automatic backup to localStorage every 30 seconds

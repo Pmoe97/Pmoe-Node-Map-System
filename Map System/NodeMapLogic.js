@@ -1115,6 +1115,7 @@ window.MapSystem = {
 
 };
 
+
 // Initialize when DOM is ready
 $(document).ready(() => {
     MapSystem.init();
