@@ -1,188 +1,440 @@
-# Twine Map Editor
+# Twine Map Builder Tool
 
-A local web-based map editor for creating structured map data for Twine 2 / SugarCube 2 projects.
+A visual editor for creating and managing grid-based maps for Twine 2 / SugarCube 2 projects. This tool provides a comprehensive interface for designing interactive game maps with nodes, transitions, conditions, and rich passage content.
+
+![Map Builder Interface](screenshot-placeholder.png)
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Getting Started](#getting-started)
+- [Interface Guide](#interface-guide)
+- [Core Functionality](#core-functionality)
+- [Advanced Features](#advanced-features)
+- [Import/Export](#importexport)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Tips & Best Practices](#tips--best-practices)
+- [Troubleshooting](#troubleshooting)
+
+## Overview
+
+The Twine Map Builder Tool is a standalone web application that allows game developers to visually create and edit node-based maps for their Twine games. It generates JSON map data and Twine passage files that integrate seamlessly with the Enhanced Twine Map System.
+
+### Key Benefits
+
+- **Visual Editing**: Design maps using a intuitive grid interface
+- **Real-time Preview**: See your map as players will experience it
+- **Rich Content Editing**: Built-in passage editor with WYSIWYG support
+- **Conditional Logic**: Create dynamic maps that respond to game state
+- **Export Ready**: Generate files that work directly with your Twine project
 
 ## Features
 
-### Core Functionality
-- **100% Static**: No server backend required - runs entirely in your browser
-- **Visual Grid Editor**: Create maps on a customizable grid layout (3x3 to 20x20)
-- **Enhanced Node Editing**: Add names, passage references, icons, fog-of-war, and dynamic conditions
-- **Advanced Transition System**: Create bidirectional or one-way transitions with complex conditions
-- **Dual Export System**: Generate both JSON map files and Twine .tw passage files
-- **Import/Export**: Load existing maps for editing and export in multiple formats
+### Core Features
+- ✅ Grid-based map creation (up to 20x20)
+- ✅ Visual node editing with icons and colors
+- ✅ Directional transitions with multiple types
+- ✅ Fog of war support
+- ✅ Undo/redo functionality
+- ✅ Dark/light theme toggle
 
-### User Experience Enhancements
-- **Node Memory**: Unsaved changes persist when switching between nodes
-- **Auto-save**: Automatic backup to localStorage every 30 seconds
-- **Larger Transition Connectors**: More clickable and user-friendly interface
-- **Dark/Light Theme**: Toggle between themes with persistent preference
-- **Responsive Design**: Works on desktop and mobile devices
+### Enhanced Features
+- ✅ **Tag System**: Categorize locations with dynamic tags
+- ✅ **Entry Points**: Define multiple spawn locations
+- ✅ **Conditional Nodes**: Nodes that change based on game state
+- ✅ **Style Patterns**: Visual patterns and custom colors
+- ✅ **Passage Editor**: Professional text editor with visual/code modes
+- ✅ **Bulk Operations**: Select and edit multiple nodes at once
+- ✅ **Advanced Navigation**: Pan, zoom, and keyboard controls
 
-### Advanced Features
-- **Node Conditions**: Add dynamic content conditions for changing map behavior
-- **Transition Conditions**: Complex unlock requirements (items, quests, variables)
-- **Passage Generation**: Auto-generate Twine passage stubs for all map content
-- **Memory Persistence**: Form data preserved when navigating between nodes
-- **Visual Feedback**: Enhanced connectors show transition types and conditions
+### Import/Export
+- ✅ JSON map export with full data preservation
+- ✅ Twine passage (.tw) file generation
+- ✅ Dual-file import system
+- ✅ Map merging capabilities
+- ✅ Placement mode for importing map sections
 
 ## Getting Started
 
-1. Open `index.html` in your web browser
-2. Set your map name, width, and height in the initial setup dialog
-3. Click on grid cells to edit nodes
-4. Click on connectors between cells to edit transitions
-5. Export your completed map as JSON
+### Installation
 
-## Usage Guide
+1. **Download the Map Builder Tool**
+   ```
+   Map Builder Tool/
+   ├── index.html
+   ├── main.js
+   ├── styles.css
+   └── README.md
+   ```
 
-### Creating a New Map
+2. **Open in Browser**
+   - Open `index.html` in a modern web browser (Chrome, Firefox, Edge recommended)
+   - No server required - runs entirely in the browser
 
-When you first open the editor or click "New Map":
-1. Enter a **Map Name** (used for the exported filename)
-2. Set **Map Width** (3-20 columns)
-3. Set **Map Height** (3-20 rows)
-4. Click "Create Map"
+### Creating Your First Map
 
-### Editing Nodes
+1. **Start a New Map**
+   - Enter a map name (e.g., "Village Map")
+   - Set dimensions (width × height)
+   - Click "Create Map"
 
-Click on any grid cell to open the node editor:
+2. **Add Nodes**
+   - Click any grid cell to open the node editor
+   - Fill in:
+     - **Node Name**: Display name (e.g., "Town Square")
+     - **Passage Name**: Twine passage link (e.g., "TownSquare")
+     - **Icon**: Choose from 100+ Lucide icons
+     - **Tags**: Add descriptive tags
 
-- **Node Name**: Display name for the location
-- **Passage Name**: Reference to your Twine passage
-- **Icon**: Select from predefined Lucide icons
-- **Fog of War**: Toggle to hide/reveal the node initially
+3. **Create Transitions**
+   - In the node editor, set transition types for each direction
+   - Options: None, Bidirectional, One-Way, Locked, Secret
+   - Add conditions to transitions for dynamic gameplay
 
-### Creating Transitions
+4. **Export Your Map**
+   - Click "Export JSON" for the map structure
+   - Click "Export .tw" for Twine passages
 
-Click on the blue connectors between cells to create transitions:
+## Interface Guide
 
-- **Bidirectional**: Players can move in both directions (default)
-- **One-way**: Movement restricted to one direction
-- **Conditions**: Add requirements to unlock the transition
-  - **Item**: Player must have a specific item
-  - **Quest**: Player must have completed a quest
-  - **Variable**: Check a game variable's value
+### Main Toolbar
+
+| Button | Function | Shortcut |
+|--------|----------|----------|
+| ↶ Undo | Undo last action | Ctrl+Z |
+| ↷ Redo | Redo action | Ctrl+Y |
+| New Map | Start fresh map | - |
+| Import Map | Load existing map | - |
+| Export JSON | Save map data | - |
+| Export .tw | Generate passages | - |
+| 🌙/☀️ | Toggle theme | - |
+| ❔ | Navigation help | - |
+
+### Map Grid
+
+The central grid is where you design your map:
+- **Click** a cell to edit its node
+- **Ctrl+Click** to select multiple nodes
+- **Middle Mouse** to pan the view
+- **Ctrl+Scroll** to zoom in/out
+- **Arrow Keys** to navigate
+
+### Node Editor Sidebar
+
+When editing a node, you can set:
+
+#### Basic Properties
+- **Node Name**: Displayed on the map
+- **Passage Name**: Links to Twine passage
+- **Icon**: Visual representation
+- **Fog of War**: Hidden until discovered
+
+#### Tags
+- Type to see suggestions
+- Tags enable gameplay logic
+- Common tags: `interior`, `shop`, `dangerous`, `safe`
+
+#### Entry Points
+- Mark nodes as spawn locations
+- Types: Default, North, South, East, West, Teleport, etc.
+- Only one node per entry type
+
+#### Style
+- **Primary Color**: Main node color
+- **Secondary Color**: Accent color
+- **Pattern**: Visual patterns (stripes, dots, grid, etc.)
+
+#### Transitions
+- Set movement rules for each direction
+- Add conditions for locked paths
+- Create one-way passages
+
+#### Node Conditions
+- Define alternate states based on game variables
+- Change appearance dynamically
+- Support for items, quests, variables, and time
+
+## Core Functionality
+
+### Node Management
+
+#### Creating Nodes
+1. Click empty grid cell
+2. Fill in node details
+3. Choose icon and colors
+4. Click "Save Node"
+
+#### Editing Nodes
+1. Click existing node
+2. Modify properties
+3. Changes auto-save to memory
+4. Click "Save Node" to commit
+
+#### Clearing Nodes
+- Click "Clear Node" to remove all data
+- Transitions to this node are preserved
+
+### Transition System
+
+#### Transition Types
+
+| Type | Description | Visual |
+|------|-------------|--------|
+| None | No connection | No line |
+| Bidirectional | Two-way travel | Solid line |
+| One-Way | Directional travel | Arrow |
+| Locked | Requires conditions | Dashed line |
+| Secret | Hidden passage | Invisible |
+
+#### Adding Conditions
+1. Select transition direction
+2. Click "Edit Conditions"
+3. Choose condition type:
+   - **Item**: Requires specific items
+   - **Quest**: Based on quest progress
+   - **Variable**: Check game variables
+4. Set operators and values
+
+### Tag System
+
+Tags categorize locations and enable gameplay mechanics:
+
+#### Using Tags
+- Start typing to see suggestions
+- Tags auto-complete from project library
+- Create new tags by typing and pressing Enter
+- Remove tags by clicking the × on tag chips
+
+#### Special Tags
+- `entry-default`: Default spawn point
+- `shop`: Commerce locations
+- `dangerous`: Combat zones
+- `safe`: No-combat areas
+- `interior`/`exterior`: Environment types
+
+### Style Customization
+
+#### Color Picker
+- Click color swatches to choose
+- Recent colors are saved
+- Hex input for precise colors
+
+#### Patterns
+- **Diagonal Stripes**: Classic pattern
+- **Dots**: Polka dot pattern
+- **Grid**: Crosshatch pattern
+- **Checkerboard**: Alternating squares
+- **Vertical/Horizontal Stripes**: Line patterns
+
+## Advanced Features
+
+### Professional Passage Editor
+
+Access the passage editor by clicking "Edit Passage Text" in any node.
+
+#### Three View Modes
+
+1. **Visual Mode** (WYSIWYG)
+   - Format text visually
+   - Add interactive elements
+   - See formatted preview
+
+2. **Code Mode**
+   - Direct Twine/SugarCube syntax
+   - Syntax highlighting
+   - Format code button
+
+3. **Preview Mode**
+   - See how players experience it
+   - Test interactive elements
+   - Check conditional logic
+
+#### Editor Features
+
+##### Text Formatting
+- **Bold**: Ctrl+B or **text**
+- **Italic**: Ctrl+I or *text*
+- **Links**: [[Passage Name]]
+
+##### Interactive Macros
+- **Replace**: Click to replace content
+- **Append**: Click to add content
+- **Clear**: Click to remove content
+
+##### Advanced Tools
+- **Conditional Logic**: If/else branches
+- **Variables**: Set game state
+- **Audio**: Sound effects and music
+- **Span Wrapping**: Target specific text
+
+### Bulk Operations
+
+1. **Select Multiple Nodes**
+   - Hold Ctrl and click nodes
+   - Or right-click and drag
+
+2. **Bulk Actions**
+   - Delete selected nodes
+   - Copy/paste groups
+   - Apply common properties
+
+### Navigation Controls
+
+| Action | Control |
+|--------|---------|
+| Pan | Middle mouse drag |
+| Zoom | Ctrl + scroll wheel |
+| Navigate | Arrow keys |
+| Select Multiple | Ctrl + click |
+| Box Select | Right-click + drag |
+| Clear Selection | Esc |
+
+### Map Loading Animation
+
+When importing large maps, enjoy a visual loading animation:
+- Gradient border effect
+- Progress updates
+- Non-blocking processing
+
+## Import/Export
 
 ### Exporting Maps
 
-Click "Export JSON" to download your map data. The exported file includes:
-
+#### JSON Export (Complete Data)
 ```json
 {
-  "mapId": "example_map",
-  "name": "Example Map",
-  "defaultStart": { "x": 5, "y": 3 },
-  "nodes": [
-    {
-      "column": 5,
-      "row": 3,
-      "name": "Merchant Thoroughfare",
-      "passage": "Merchant_Thoroughfare",
-      "icon": "store",
-      "fogOfWar": false,
-      "transitions": {
-        "north": {
-          "type": "bi",
-          "conditions": []
-        },
-        "east": {
-          "type": "oneway",
-          "conditions": [
-            {
-              "type": "item",
-              "item": "silver_key"
-            }
-          ]
-        }
-      }
-    }
-  ]
+  "mapId": "village_map",
+  "name": "Village Map",
+  "gridSize": { "width": 10, "height": 10 },
+  "nodes": [...],
+  "passageTexts": {...},
+  "projectTagLibrary": [...],
+  "entryPointRegistry": {...}
 }
 ```
 
+#### Twine Export (.tw file)
+```
+:: Start
+<<set $player.mapState.currentMapId = "village_map">>
+<<set $player.mapState.position = {x: 1, y: 1}>>
+
+:: TownSquare
+You stand in the bustling town square...
+
+:: Inn
+The cozy inn welcomes weary travelers...
+```
+
+### Importing Maps
+
+#### Single File Import
+1. Click "Import Map"
+2. Select your .json file
+3. Choose import method:
+   - **Fresh Workspace**: Replace current
+   - **Add to Workspace**: Merge maps
+
+#### Dual File Import
+1. Import .json structure
+2. Optionally upload .tw for passages
+3. System merges both files
+
+#### Placement Mode
+When adding to existing map:
+1. Preview shows import overlay
+2. Click to position
+3. Confirm placement
+
 ## Keyboard Shortcuts
 
-- **Escape**: Close sidebar/modal
-- **Theme Toggle**: Click the moon/sun icon in the toolbar
+### Global Shortcuts
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+Z | Undo |
+| Ctrl+Y | Redo |
+| Arrow Keys | Navigate map |
+| Esc | Close modals/Clear selection |
 
-## Browser Compatibility
+### Passage Editor Shortcuts
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+B | Bold |
+| Ctrl+I | Italic |
+| Ctrl+S | Save passage |
 
-This editor works in all modern browsers:
-- Chrome/Chromium
-- Firefox
-- Safari
-- Edge
+## Tips & Best Practices
 
-## File Structure
+### Map Design
+1. **Plan Your Layout**: Sketch on paper first
+2. **Use Consistent Naming**: PassageName matches node names
+3. **Tag Everything**: Makes filtering easier later
+4. **Color Code**: Use colors to indicate area types
 
-```
-twine-map-editor/
-├── index.html      # Main application file
-├── styles.css      # Styling and themes
-├── main.js         # Application logic
-└── README.md       # This file
-```
+### Performance
+1. **Reasonable Size**: 10×10 works well, 20×20 maximum
+2. **Save Often**: Export regularly
+3. **Test Imports**: Verify your exports work
 
-## Technical Details
-
-### Dependencies
-
-- **Lucide Icons**: Loaded via CDN for node icons
-- **No Frameworks**: Built with vanilla HTML, CSS, and JavaScript
-
-### Data Storage
-
-- **Theme Preference**: Saved to localStorage
-- **Map Data**: Stored in memory (export to save permanently)
-
-### Export Format
-
-The exported JSON is designed to integrate seamlessly with SugarCube 2 map systems. Each node contains:
-
-- Position coordinates (column, row)
-- Display information (name, icon, fog-of-war)
-- Passage reference for Twine integration
-- Transition data with conditions
-
-## Tips for Use
-
-1. **Plan Your Layout**: Sketch your map before starting to determine optimal grid size
-2. **Consistent Naming**: Use clear, consistent names for nodes and passages
-3. **Test Transitions**: Verify all connections work as expected before exporting
-4. **Save Frequently**: Export your work regularly as there's no auto-save
-5. **Icon Selection**: Choose icons that clearly represent each location type
-
-## Integration with Twine/SugarCube
-
-The exported JSON can be loaded into your SugarCube project using:
-
-```javascript
-// Load the map data
-const mapData = /* your exported JSON */;
-
-// Initialize your map system
-MapSystem.loadMap(mapData);
-```
+### Organization
+1. **Entry Points**: Always set at least one
+2. **Transitions**: Think about player flow
+3. **Conditions**: Don't over-complicate
 
 ## Troubleshooting
 
-### Icons Not Displaying
-- Ensure you have an internet connection (Lucide icons load from CDN)
+### Common Issues
+
+#### Map Won't Load
+- Check JSON syntax
+- Verify file isn't corrupted
+- Ensure all required fields present
+
+#### Transitions Not Showing
+- Verify both nodes exist
+- Check transition type isn't "none"
+- Ensure grid bounds are correct
+
+#### Icons Not Displaying
+- Internet connection required (Lucide CDN)
 - Try refreshing the page
 
-### Export Not Working
-- Check that you have at least one node with data
-- Ensure your browser allows file downloads
+#### Passage Text Lost
+- Always export .tw files
+- Use dual import for complete restore
+- Check browser console for errors
 
-### Grid Too Small/Large
-- Create a new map with different dimensions
-- Recommended sizes: 5x5 to 15x15 for most projects
+### Browser Compatibility
+- **Recommended**: Chrome, Firefox, Edge (latest)
+- **Minimum**: ES6 support required
+- **Not Supported**: Internet Explorer
 
-## Contributing
+### Data Recovery
+The tool saves to browser memory:
+1. Unsaved changes persist during session
+2. Export regularly to preserve work
+3. Use version control for map files
 
-This is a standalone tool designed for the Twine community. Feel free to modify and distribute as needed.
+## Version History
 
-## License
+### v2.0
+- Conditional nodes
+- Style patterns
+- Improved import/export
+- Professional passage editor
+- Enhanced tag system
+- Entry point management
+- Bulk operations
+- Loading animations
 
-Free to use and modify for any purpose.
+### v1.0
+- Initial release
+- Basic map creation
+- Simple transitions
+
+---
+
+**Created for**: Twine 2 / SugarCube 2  
+**License**: Free for any use  
+**Support**: See implementation guide for integration help

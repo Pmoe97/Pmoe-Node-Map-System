@@ -247,8 +247,13 @@ function createGridCell(col, row) {
     cell.dataset.col = col;
     cell.dataset.row = row;
     
-    // Add click handler for node editing - pass the event
-    cell.addEventListener('click', (event) => editNode(col, row, event));
+    // Add click handler for node editing - this needs to check for Ctrl/Cmd too
+    cell.addEventListener('click', (event) => {
+        // Don't open edit panel if Ctrl/Cmd is held (multi-select mode)
+        if (!event.ctrlKey && !event.metaKey) {
+            editNode(col, row, event);
+        }
+    });
     
     // Create transition connectors
     createTransitionConnectors(cell, col, row);
@@ -456,7 +461,12 @@ function editNode(col, row, event) {
                 nodeData.style.primaryColor || '#007bff',
                 nodeData.style.secondaryColor || '#6c757d'
             );
-            document.getElementById('nodePattern').value = nodeData.style.pattern || 'none';
+            // REMOVED: document.getElementById('nodePattern').value = nodeData.style.pattern || 'none';
+            // Instead, set the pattern in the color picker instance
+            const patternSelect = document.querySelector('#nodeColorPicker .pattern-select');
+            if (patternSelect) {
+                patternSelect.value = nodeData.style.pattern || 'none';
+            }
         }
 
         // Load entry point data
@@ -1052,6 +1062,40 @@ function prepareExportData(includeExtras = false) {
     // Convert Map to array of full node objects
     for (const [key, nodeData] of mapData.nodes) {
         const [col, row] = key.split(',').map(Number);
+        
+        // Build transitions object for this node
+        const nodeTransitions = {};
+        
+        // Check all four directions for transitions
+        ['north', 'south', 'east', 'west'].forEach(direction => {
+            let targetCol = col;
+            let targetRow = row;
+            
+            switch (direction) {
+                case 'north': targetRow--; break;
+                case 'south': targetRow++; break;
+                case 'east': targetCol++; break;
+                case 'west': targetCol--; break;
+            }
+            
+            const transitionKey = `${col},${row}-${targetCol},${targetRow}`;
+            const reverseKey = `${targetCol},${targetRow}-${col},${row}`;
+            
+            const transition = mapData.transitions.get(transitionKey) || mapData.transitions.get(reverseKey);
+            
+            if (transition && transition.type !== 'none') {
+                nodeTransitions[direction] = {
+                    type: transition.type,
+                    conditions: transition.conditions || []
+                };
+                
+                // Include direction info for one-way transitions
+                if (transition.type === 'one-way' && transition.direction) {
+                    nodeTransitions[direction].direction = transition.direction;
+                }
+            }
+        });
+        
         exportData.nodes.push({
             column: col,
             row: row,
@@ -1062,7 +1106,7 @@ function prepareExportData(includeExtras = false) {
             tags: nodeData.tags || [],
             style: nodeData.style || {},
             conditions: nodeData.conditions || [],
-            transitions: nodeData.transitions || {}
+            transitions: nodeTransitions // Include the transitions object
         });
     }
 
@@ -1122,6 +1166,40 @@ async function exportMap({ usePrompt = true, includeExtras = false } = {}) {
     alert('Map exported successfully!');
 }
 
+function showMapLoadingAnimation() {
+    // Create loading overlay
+    const loadingOverlay = document.createElement('div');
+    loadingOverlay.id = 'mapLoadingOverlay';
+    loadingOverlay.className = 'map-loading-overlay';
+    
+    loadingOverlay.innerHTML = `
+        <div class="loading-frame">
+            <div class="loading-content">
+                <h2>Loading Map...</h2>
+                <p>Please wait while we process your map data</p>
+                <div class="loading-progress">
+                    <div class="progress-text">Initializing...</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(loadingOverlay);
+    
+    // Return a function to hide the loader
+    return {
+        updateProgress: (text) => {
+            const progressText = loadingOverlay.querySelector('.progress-text');
+            if (progressText) progressText.textContent = text;
+        },
+        hide: () => {
+            loadingOverlay.classList.add('fade-out');
+            setTimeout(() => {
+                loadingOverlay.remove();
+            }, 500);
+        }
+    };
+}
 
 // Import map functionality
 async function importMap() {
@@ -1208,104 +1286,194 @@ function handleFileImport(event) {
 
 
 function loadImportedMap(importedData) {
-    // Validate structure
-    if (!importedData.name || !Array.isArray(importedData.nodes)) {
-        alert('Invalid map format. Missing required fields.');
-        return;
-    }
-
-    // Determine grid size
-    let width = 5, height = 5;
-    if (importedData.gridSize) {
-        width = importedData.gridSize.width || 5;
-        height = importedData.gridSize.height || 5;
-    } else {
-        // Calculate from node positions
-        let maxCol = 0, maxRow = 0;
-        importedData.nodes.forEach(node => {
-            // Handle different coordinate formats
-            const col = node.column !== undefined ? node.column : (node.col !== undefined ? node.col : node.x);
-            const row = node.row !== undefined ? node.row : (node.y !== undefined ? node.y : node.row);
-            maxCol = Math.max(maxCol, col);
-            maxRow = Math.max(maxRow, row);
-        });
-        width = Math.max(5, maxCol + 1);
-        height = Math.max(5, maxRow + 1);
-    }
-
-    // Initialize map
-    mapData = {
-        name: importedData.name,
-        width,
-        height,
-        nodes: new Map(),
-        transitions: new Map()
-    };
-
-    // Clear and rebuild tag library
-    projectTagLibrary.clear();
-
-    // Load nodes
-    importedData.nodes.forEach(node => {
-        // Handle different coordinate formats
-        const col = node.column !== undefined ? node.column : (node.col !== undefined ? node.col : node.x);
-        const row = node.row !== undefined ? node.row : (node.y !== undefined ? node.y : node.row);
-        
-        const nodeKey = `${col},${row}`;
-        const nodeData = {
-            name: node.name || '',
-            passage: node.passage || '',
-            icon: node.icon || '',
-            fogOfWar: node.fogOfWar || false,
-            tags: node.tags || [],  // Preserve original format
-            conditions: node.conditions || [],
-            style: node.style || null,
-            entryPoint: node.entryPoint || null
-        };
-
-        mapData.nodes.set(nodeKey, nodeData);
-
-        // Build tag library from imported tags
-        if (nodeData.tags && Array.isArray(nodeData.tags)) {
-            nodeData.tags.forEach(tag => {
-                if (typeof tag === 'string' && tag.trim()) {
-                    projectTagLibrary.add(tag.trim());
+    // Show loading animation
+    const loader = showMapLoadingAnimation();
+    
+    // Use requestIdleCallback for non-blocking processing
+    const processInChunks = async () => {
+        try {
+            // Step 1: Validate
+            await processChunk(() => {
+                loader.updateProgress('Validating map structure...');
+                if (!importedData.name || !Array.isArray(importedData.nodes)) {
+                    throw new Error('Invalid map format. Missing required fields.');
                 }
             });
-        }
-
-        // Load transitions
-        if (node.transitions) {
-            Object.entries(node.transitions).forEach(([type, data]) => {
-                if (data && data.target) {
-                    const transitionKey = `${col},${row}-${data.target.col},${data.target.row}`;
-                    mapData.transitions.set(transitionKey, {
-                        type: type,
-                        direction: data.direction || null,
-                        conditions: data.conditions || []
+            
+            // Step 2: Calculate dimensions
+            let width = 5, height = 5;
+            await processChunk(() => {
+                loader.updateProgress('Calculating grid dimensions...');
+                if (importedData.gridSize) {
+                    width = importedData.gridSize.width || 5;
+                    height = importedData.gridSize.height || 5;
+                } else {
+                    let maxCol = 0, maxRow = 0;
+                    importedData.nodes.forEach(node => {
+                        const col = node.column !== undefined ? node.column : (node.col !== undefined ? node.col : node.x);
+                        const row = node.row !== undefined ? node.row : (node.y !== undefined ? node.y : node.row);
+                        maxCol = Math.max(maxCol, col);
+                        maxRow = Math.max(maxRow, row);
                     });
+                    width = Math.max(5, maxCol + 1);
+                    height = Math.max(5, maxRow + 1);
                 }
             });
+            
+            // Step 3: Initialize map
+            await processChunk(() => {
+                loader.updateProgress('Creating map structure...');
+                mapData = {
+                    name: importedData.name,
+                    width,
+                    height,
+                    nodes: new Map(),
+                    transitions: new Map()
+                };
+                projectTagLibrary.clear();
+            });
+            
+            // Step 4: Process nodes in batches
+            const nodeCount = importedData.nodes.length;
+            const batchSize = 10; // Process 10 nodes at a time
+
+            for (let i = 0; i < nodeCount; i += batchSize) {
+                await processChunk(() => {
+                    loader.updateProgress(`Loading nodes ${i + 1}-${Math.min(i + batchSize, nodeCount)} of ${nodeCount}...`);
+                    
+                    const batch = importedData.nodes.slice(i, i + batchSize);
+                    batch.forEach(node => {
+                        const col = node.column !== undefined ? node.column : (node.col !== undefined ? node.col : node.x);
+                        const row = node.row !== undefined ? node.row : (node.y !== undefined ? node.y : node.row);
+                        
+                        const nodeKey = `${col},${row}`;
+                        const nodeData = {
+                            name: node.name || '',
+                            passage: node.passage || '',
+                            icon: node.icon || '',
+                            fogOfWar: node.fogOfWar || false,
+                            tags: node.tags || [],
+                            conditions: node.conditions || [],
+                            style: node.style || null,
+                            entryPoint: node.entryPoint || null
+                        };
+                        
+                        mapData.nodes.set(nodeKey, nodeData);
+                        
+                        // Build tag library
+                        if (nodeData.tags && Array.isArray(nodeData.tags)) {
+                            nodeData.tags.forEach(tag => {
+                                if (typeof tag === 'string' && tag.trim()) {
+                                    projectTagLibrary.add(tag.trim());
+                                }
+                            });
+                        }
+                        
+                        // Load transitions - FIX: Process the transitions object correctly
+                        if (node.transitions && typeof node.transitions === 'object') {
+                            Object.entries(node.transitions).forEach(([direction, transitionData]) => {
+                                // Calculate target coordinates based on direction
+                                let targetCol = col;
+                                let targetRow = row;
+                                
+                                switch (direction) {
+                                    case 'north':
+                                        targetRow = row - 1;
+                                        break;
+                                    case 'south':
+                                        targetRow = row + 1;
+                                        break;
+                                    case 'east':
+                                        targetCol = col + 1;
+                                        break;
+                                    case 'west':
+                                        targetCol = col - 1;
+                                        break;
+                                    default:
+                                        return; // Skip invalid directions
+                                }
+                                
+                                // Only create transition if target is within bounds
+                                if (targetCol >= 0 && targetCol < mapData.width && 
+                                    targetRow >= 0 && targetRow < mapData.height) {
+                                    
+                                    const transitionKey = `${col},${row}-${targetCol},${targetRow}`;
+                                    
+                                    // Handle different transition data formats
+                                    if (transitionData && typeof transitionData === 'object') {
+                                        mapData.transitions.set(transitionKey, {
+                                            type: transitionData.type || 'bidirectional',
+                                            direction: transitionData.direction || null,
+                                            conditions: transitionData.conditions || []
+                                        });
+                                    } else if (typeof transitionData === 'string') {
+                                        // Handle legacy format where transition might just be a type string
+                                        mapData.transitions.set(transitionKey, {
+                                            type: transitionData,
+                                            direction: null,
+                                            conditions: []
+                                        });
+                                    }
+                                }
+                            });
+                        }
+                    });
+                });
+            }
+            
+            // Step 5: Render UI
+            await processChunk(() => {
+                loader.updateProgress('Rendering map...');
+                document.getElementById('mapTitle').textContent = `Twine Map Editor - ${mapData.name}`;
+                generateGrid();
+                applyAllNodeStyling();
+            });
+            
+            // Step 6: Update transitions
+            await processChunk(() => {
+                loader.updateProgress('Updating transitions...');
+                for (let row = 0; row < mapData.height; row++) {
+                    for (let col = 0; col < mapData.width; col++) {
+                        updateTransitionConnectors(col, row);
+                    }
+                }
+            });
+            
+            // Step 7: Finalize
+            await processChunk(() => {
+                closeSidebar();
+                hideSetupModal();
+            });
+            
+            // Hide loader
+            loader.hide();
+            alert('Map imported successfully!');
+            
+        } catch (error) {
+            loader.hide();
+            alert(error.message || 'Failed to import map');
         }
-    });
-
-    // Update UI
-    document.getElementById('mapTitle').textContent = `Twine Map Editor - ${mapData.name}`;
-    generateGrid();
-    applyAllNodeStyling();
-
-    for (let row = 0; row < mapData.height; row++) {
-        for (let col = 0; col < mapData.width; col++) {
-            updateTransitionConnectors(col, row);
-        }
-    }
-
-    closeSidebar();
-    hideSetupModal();
-    alert('Map imported successfully!');
+    };
+    
+    processInChunks();
 }
 
-
+function processChunk(fn) {
+    return new Promise((resolve) => {
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => {
+                fn();
+                resolve();
+            }, { timeout: 50 });
+        } else {
+            // Fallback for browsers without requestIdleCallback
+            setTimeout(() => {
+                fn();
+                resolve();
+            }, 0);
+        }
+    });
+}
 
 // Node memory functionality
 function setupNodeMemoryListeners() {
@@ -2748,7 +2916,7 @@ function handleCellClick(e) {
     }
     
     e.preventDefault();
-    e.stopPropagation();
+    // REMOVED: e.stopPropagation(); - This was preventing other handlers
     
     const cell = e.currentTarget;
     const col = parseInt(cell.dataset.col);

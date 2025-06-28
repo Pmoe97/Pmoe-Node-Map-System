@@ -1,6 +1,6 @@
 # Twine Map System - Complete Implementation Guide
 
-A comprehensive grid-based navigation system for Twine 2 / SugarCube 2 projects with visual minimap, keyboard controls, fog of war, and conditional transitions. This Node-Network style system was inspired by Fenoxo's map system in games like Trials in Tainted Space. 
+A comprehensive grid-based navigation system for Twine 2 / SugarCube 2 projects with visual minimap, keyboard controls, fog of war, conditional transitions, and advanced features like entry points, tags, and dynamic styling. This Node-Network style system was inspired by Fenoxo's map system in games like Trials in Tainted Space.
 
 ## Table of Contents
 
@@ -9,19 +9,21 @@ A comprehensive grid-based navigation system for Twine 2 / SugarCube 2 projects 
 3. [Installation Guide](#installation-guide)
 4. [Map Data Format](#map-data-format)
 5. [Core Features](#core-features)
-6. [Implementation Steps](#implementation-steps)
-7. [HTML Integration](#html-integration)
-8. [CSS Styling](#css-styling)
-9. [JavaScript API](#javascript-api)
-10. [Advanced Features](#advanced-features)
-11. [Troubleshooting](#troubleshooting)
-12. [Examples](#examples)
+6. [Enhanced Features](#enhanced-features)
+7. [Implementation Steps](#implementation-steps)
+8. [HTML Integration](#html-integration)
+9. [CSS Styling](#css-styling)
+10. [JavaScript API](#javascript-api)
+11. [Advanced Features](#advanced-features)
+12. [Troubleshooting](#troubleshooting)
+13. [Examples](#examples)
+14. [Migration Guide](#migration-guide)
 
 ---
 
 ## System Overview
 
-The Twine Map System provides a complete grid-based navigation solution that integrates seamlessly with SugarCube 2. It features:
+The Enhanced Twine Map System provides a complete grid-based navigation solution that integrates seamlessly with SugarCube 2. It features:
 
 - **Visual Grid Navigation**: Interactive maps with clickable tiles
 - **Keyboard Controls**: WASD and arrow key movement
@@ -29,7 +31,11 @@ The Twine Map System provides a complete grid-based navigation solution that int
 - **Full Map View**: Expandable journal map interface
 - **Fog of War**: Progressive map revelation system
 - **Conditional Transitions**: Item, quest, and variable-based movement restrictions
+- **Entry Point System**: Context-aware spawn locations
+- **Tag System**: Region and location-based gameplay logic
+- **Style Customization**: Visual patterns and colors for nodes
 - **Dynamic Content**: Node conditions for changing map behavior
+- **Passage Text Support**: Integrated Twine passage content
 - **Auto-save Integration**: Persistent player progress
 
 ---
@@ -91,40 +97,52 @@ Add to your **StoryInit** passage:
 <<set $world = { locationName: "Unknown" }>>
 ```
 
+### Step 4: Include Lucide Icons
+
+Add to your **Story JavaScript** or HTML header:
+```html
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+```
+
 ---
 
 ## Map Data Format
 
-Maps are stored as JSON files with the following structure:
+Maps are stored as JSON files with the following enhanced structure:
 
 ```json
 {
-  "mapId": "unique-map-identifier",
-  "name": "Display Name",
-  "description": "Optional description",
+  "mapId": "example-map",
+  "name": "Example Map",
+  "region": "bastion",
   "gridSize": {
-    "width": 9,
-    "height": 7
+    "width": 10,
+    "height": 10
   },
+  "defaultStart": { "x": 1, "y": 1 },
   "fogOfWar": false,
-  "playerStartPosition": {
-    "x": 5,
-    "y": 3
-  },
   "nodes": [
     {
-      "id": "unique-node-id",
-      "x": 5,
-      "y": 3,
-      "passage": "TwinePassageName",
-      "name": "Location Display Name",
+      "column": 0,
+      "row": 0,
+      "name": "Node Name",
+      "passage": "PassageName",
       "icon": "lucide-icon-name",
+      "fogOfWar": false,
+      "tags": ["interior", "safe", "entry-default"],
+      "style": {
+        "primaryColor": "#FFCC00",
+        "secondaryColor": "#6c757d",
+        "pattern": "diagonal-stripes"
+      },
       "conditions": [
         {
           "type": "variable",
-          "variable": "player.day",
-          "operator": "==",
-          "value": 1
+          "name": "player.level",
+          "operator": ">=",
+          "value": 5,
+          "passage": "HighLevelPassage",
+          "icon": "crown"
         }
       ],
       "transitions": {
@@ -133,30 +151,47 @@ Maps are stored as JSON files with the following structure:
           "conditions": []
         },
         "east": {
-          "type": "one-way",
-          "direction": "east",
+          "type": "locked",
           "conditions": [
             {
-              "type": "item",
-              "item": "silver_key",
-              "operator": ">=",
-              "value": 1
+              "action": "changeIf",
+              "type": "variable",
+              "name": "VisitedTop",
+              "operator": "==",
+              "value": "true",
+              "changeTarget": "bidirectional"
             }
           ]
         }
       }
     }
-  ]
+  ],
+  "passageTexts": {
+    "1,1": {
+      "main": "Main passage text",
+      "conditions": {
+        "ConditionalPassage": "Conditional text"
+      }
+    }
+  },
+  "projectTagLibrary": ["interior", "exterior", "bastion", "public", "private"],
+  "entryPointRegistry": {
+    "entry-default": "1,1",
+    "entry-east": "5,3",
+    "entry-teleport": "7,7"
+  }
 }
 ```
 
 ### Node Properties
 
-- **id**: Unique identifier for the node
-- **x, y**: Grid coordinates (1-based)
+- **column/row**: Grid coordinates (also supports x/y for backward compatibility)
+- **name**: Display name for the location
 - **passage**: Name of the Twine passage to navigate to
-- **name**: Display name shown in UI
 - **icon**: Lucide icon name for visual representation
+- **fogOfWar**: Individual fog of war override
+- **tags**: Array of tags for gameplay logic (e.g., "interior", "dangerous", "entry-default")
+- **style**: Visual customization with colors and patterns
 - **conditions**: Array of conditions that affect node behavior
 - **transitions**: Object defining movement to adjacent nodes
 
@@ -164,26 +199,29 @@ Maps are stored as JSON files with the following structure:
 
 - **bidirectional**: Movement allowed in both directions
 - **one-way**: Movement restricted to specified direction
+- **locked**: Blocked until conditions are met
+- **secret**: Hidden from view
+- **none**: No transition possible
 
 ### Condition Types
 
-1. **Item Conditions**:
-   ```json
-   {
-     "type": "item",
-     "item": "key_name",
-     "operator": ">=",
-     "value": 1
-   }
-   ```
-
-2. **Variable Conditions**:
+1. **Variable Conditions**:
    ```json
    {
      "type": "variable",
-     "variable": "player.stats.strength",
+     "name": "player.stats.strength",
      "operator": ">=",
      "value": 10
+   }
+   ```
+
+2. **Item Conditions**:
+   ```json
+   {
+     "type": "item",
+     "name": "silver_key",
+     "operator": ">=",
+     "value": 1
    }
    ```
 
@@ -191,9 +229,19 @@ Maps are stored as JSON files with the following structure:
    ```json
    {
      "type": "quest",
-     "quest": "main_quest_completed",
+     "name": "main_quest_completed",
      "operator": "==",
      "value": true
+   }
+   ```
+
+4. **Time Conditions**:
+   ```json
+   {
+     "type": "time",
+     "name": "currentHour",
+     "operator": "between",
+     "value": [6, 18]
    }
    ```
 
@@ -205,8 +253,8 @@ Maps are stored as JSON files with the following structure:
 
 The system uses a coordinate-based grid where:
 - **X-axis**: Horizontal movement (west/east)
-- **Y-axis**: Vertical movement (north/south)
-- **Origin**: Top-left corner (1,1)
+- **Y-axis**: Vertical movement (north/south)  
+- **Origin**: Top-left corner (0,0) or (1,1) depending on configuration
 
 ### 2. Movement Controls
 
@@ -218,7 +266,7 @@ The system uses a coordinate-based grid where:
 
 **Mouse Navigation**:
 - Click adjacent tiles in full map view
-- Click minimap fullscreen button
+- Click minimap for quick navigation
 
 ### 3. Visual Feedback
 
@@ -227,12 +275,15 @@ The system uses a coordinate-based grid where:
 - Real-time position updates
 - Icon-based location identification
 - Transition indicators
+- Tag-based border styling
 
 **Full Map Features**:
 - Complete map overview
 - Clickable navigation
 - Fog of war visualization
 - Player position highlighting
+- Entry point indicators
+- Style pattern visualization
 
 ### 4. Fog of War System
 
@@ -244,13 +295,99 @@ The system uses a coordinate-based grid where:
 
 ---
 
+## Enhanced Features
+
+### 1. Entry Point System
+
+Define multiple entry points for context-aware spawning:
+
+```javascript
+// Enter from different locations
+await MapSystem.setCurrentMap('city-map', null, 'entry-east');
+await MapSystem.setCurrentMap('city-map', null, 'entry-teleport');
+
+// Get available entry points
+const entryPoints = MapSystem.getAvailableEntryPoints();
+
+// Teleport to specific entry
+MapSystem.teleportToEntryPoint('entry-default');
+```
+
+### 2. Tag System
+
+Use tags for region-based logic and visual styling:
+
+```javascript
+// Check current location tags
+if (MapSystem.currentLocationHasTag('dangerous')) {
+    // Spawn enemies
+}
+
+// Find all taverns
+const taverns = MapSystem.getNodesByTag('tavern');
+
+// Check region access
+if (MapSystem.canAccessRegion('restricted')) {
+    // Allow entry
+}
+```
+
+### 3. Style Customization
+
+Nodes support visual customization:
+
+**Available Patterns**:
+- `diagonal-stripes`
+- `vertical-stripes`
+- `horizontal-stripes`
+- `dots`
+- `grid`
+- `checkerboard`
+
+**Tag-Based Styling**:
+- `tag-interior`: Brown border
+- `tag-exterior`: Green border
+- `tag-dangerous`: Orange glow
+- `tag-restricted`: Red glow
+- `tag-safe`: Green border
+
+### 4. Advanced Conditions
+
+Priority-based condition evaluation:
+
+```json
+{
+  "conditions": [
+    {
+      "priority": 1,
+      "type": "variable",
+      "name": "player.level",
+      "operator": ">=",
+      "value": 10,
+      "passage": "HighLevelContent"
+    },
+    {
+      "priority": 2,
+      "type": "variable",
+      "name": "player.level",
+      "operator": ">=",
+      "value": 5,
+      "passage": "MidLevelContent"
+    }
+  ]
+}
+```
+
+---
+
 ## Implementation Steps
 
 ### Step 1: Create Your Map Data
 
-1. **Use the Map Editor** to design your map visually
+1. **Use the Map Builder Tool** to design your map visually
 2. **Export JSON** file to `dev/js/data/maps/your-map.json`
 3. **Export .tw file** for passage stubs
+4. **Import both files** if using the dual-file import feature
 
 ### Step 2: Add HTML Structure
 
@@ -291,6 +428,19 @@ Add to your **journal/overlay system**:
     <div class="map-container" id="full-map-container">
       <!-- Full map will be generated here -->
     </div>
+    <div class="map-legend">
+      <h4>Legend</h4>
+      <div class="legend-items">
+        <div class="legend-item">
+          <span class="legend-color" style="background: #007bff;"></span>
+          <span>Current Location</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-color" style="background: #ffc107;"></span>
+          <span>Entry Point</span>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 ```
@@ -303,8 +453,8 @@ In your **StoryReady** passage:
 <<script>>
 // Initialize the map system
 $(document).ready(function() {
-    // Load your first map
-    MapSystem.setCurrentMap('your-map-id');
+    // Load your first map with optional entry point
+    MapSystem.setCurrentMap('your-map-id', null, 'entry-default');
 });
 <</script>>
 ```
@@ -318,116 +468,22 @@ In each location passage:
 You are in the village square. The bustling marketplace surrounds you.
 
 <<if MapSystem.currentMap>>
-    <!-- Optional: Display current location info -->
+    <!-- Display current location info -->
     <div class="location-info">
         <strong>Location:</strong> <<print $world.locationName>><br>
-        <strong>Coordinates:</strong> (<<print MapSystem.currentPosition.x>>, <<print MapSystem.currentPosition.y>>)
+        <strong>Region:</strong> <<print MapSystem.currentMap.region>><br>
+        <strong>Tags:</strong> <<print MapSystem.getCurrentNodeTags().join(", ")>>
     </div>
 <</if>>
 
-<!-- Your passage content here -->
-
-<!-- Optional: Manual movement links -->
-<<if MapSystem.canMoveTo('north')>>
-    [[Go North|NextPassage]]
+<!-- Check for special conditions -->
+<<if MapSystem.currentLocationHasTag('shop')>>
+    [[Browse Wares|ShopInterface]]
 <</if>>
-```
 
----
-
-## HTML Integration
-
-### Minimap Integration
-
-The minimap should be integrated into your game's sidebar or UI bar:
-
-```html
-<div class="sidebar-section">
-  <div class="minimap-container">
-    <div class="minimap-header">
-      <h4>Map</h4>
-      <button id="minimap-fullscreen-btn">⛶</button>
-    </div>
-    <div id="tile-map-container"></div>
-    <div class="minimap-info">
-      <div id="minimap-current-map">No Map</div>
-      <div id="minimap-player-coords">(0,0)</div>
-    </div>
-  </div>
-</div>
-```
-
-### Journal/Overlay Integration
-
-For full map viewing, integrate with your journal system:
-
-```html
-<div class="overlay" id="journal-overlay">
-  <div class="journal-content">
-    <div class="journal-tabs">
-      <button data-tab="map">Map</button>
-      <!-- Other tabs -->
-    </div>
-    <div class="journal-tab-content" id="journal-map">
-      <!-- Map content from MapContainerStructure.html -->
-    </div>
-  </div>
-</div>
-```
-
----
-
-## CSS Styling
-
-The system includes comprehensive CSS for:
-
-### Map Grid Styling
-```css
-.tile-grid {
-    display: grid;
-    gap: 2px;
-    background: #333;
-}
-
-.tile {
-    width: 40px;
-    height: 40px;
-    background: #666;
-    border: 1px solid #999;
-    position: relative;
-}
-
-.tile-node {
-    background: #4a90e2;
-}
-
-.player-tile {
-    background: #ff6b6b;
-}
-```
-
-### Transition Indicators
-```css
-.has-north::before { /* North transition indicator */ }
-.has-south::after { /* South transition indicator */ }
-.has-east::before { /* East transition indicator */ }
-.has-west::after { /* West transition indicator */ }
-
-.oneway-north { /* One-way north styling */ }
-/* etc. */
-```
-
-### Fog of War
-```css
-.tile-hidden {
-    background: #222;
-    opacity: 0.3;
-}
-
-.tile-revealed {
-    opacity: 1;
-    transition: opacity 0.3s ease;
-}
+<<if MapSystem.currentLocationHasTag('dangerous')>>
+    <span class="warning">This area is dangerous!</span>
+<</if>>
 ```
 
 ---
@@ -445,9 +501,12 @@ Initializes the map system. Called automatically on DOM ready.
 const mapData = await MapSystem.loadMap('village-map');
 ```
 
-#### `MapSystem.setCurrentMap(mapId, position)`
+#### `MapSystem.setCurrentMap(mapId, position, entryPoint)`
 ```javascript
-// Set active map and player position
+// Set active map with entry point
+await MapSystem.setCurrentMap('village-map', null, 'entry-east');
+
+// Or with specific position
 await MapSystem.setCurrentMap('village-map', { x: 5, y: 3 });
 ```
 
@@ -457,171 +516,168 @@ await MapSystem.setCurrentMap('village-map', { x: 5, y: 3 });
 const success = await MapSystem.movePlayer('north');
 ```
 
-#### `MapSystem.canMoveTo(direction)`
+### Enhanced Methods
+
+#### `MapSystem.getNodesByTag(tag)`
 ```javascript
-// Check if movement is allowed
-if (MapSystem.canMoveTo('east')) {
-    // Movement is possible
+// Find all nodes with specific tag
+const shops = MapSystem.getNodesByTag('shop');
+```
+
+#### `MapSystem.currentLocationHasTag(tag)`
+```javascript
+// Check if current location has tag
+if (MapSystem.currentLocationHasTag('safe')) {
+    // Heal player
 }
+```
+
+#### `MapSystem.teleportToEntryPoint(entryType)`
+```javascript
+// Teleport to specific entry point
+MapSystem.teleportToEntryPoint('entry-teleport');
+```
+
+#### `MapSystem.getMapMetadata()`
+```javascript
+// Get comprehensive map information
+const metadata = MapSystem.getMapMetadata();
+console.log(metadata.region, metadata.tagCounts);
+```
+
+#### `MapSystem.getEffectiveNodeData(x, y)`
+```javascript
+// Get node data with conditions applied
+const nodeData = MapSystem.getEffectiveNodeData(5, 3);
 ```
 
 ### Utility Methods
 
-#### `MapSystem.getNodeAt(x, y)`
+#### `MapSystem.canAccessRegion(region)`
 ```javascript
-// Get node data at coordinates
-const node = MapSystem.getNodeAt(5, 3);
-```
-
-#### `MapSystem.setMovementBlocked(blocked)`
-```javascript
-// Block/unblock movement (useful for cutscenes)
-MapSystem.setMovementBlocked(true);
-```
-
-#### `MapSystem.revealTile(mapId, x, y)`
-```javascript
-// Manually reveal fog of war tile
-MapSystem.revealTile('village-map', 6, 4);
-```
-
-### Event Integration
-
-#### Passage Navigation
-```javascript
-// In your passage
-<<script>>
-// Move to specific map location
-MapSystem.setCurrentMap('dungeon-map', { x: 1, y: 1 });
-<</script>>
-```
-
-#### Conditional Movement
-```javascript
-// Check conditions before allowing movement
-if ($inventory_player.silver_key >= 1) {
-    MapSystem.movePlayer('east');
-} else {
-    UI.alert("You need a silver key to proceed.");
+// Check region access
+if (MapSystem.canAccessRegion('restricted')) {
+    // Allow access
 }
+```
+
+#### `MapSystem.getPassageText(nodeKey)`
+```javascript
+// Get stored passage text
+const text = MapSystem.getPassageText('5,3');
+```
+
+#### `MapSystem.getCurrentNodeTags()`
+```javascript
+// Get tags for current location
+const tags = MapSystem.getCurrentNodeTags();
 ```
 
 ---
 
 ## Advanced Features
 
-### 1. Dynamic Node Conditions
+### 1. Dynamic Entry Points
 
-Nodes can change behavior based on game state:
+Use entry points for context-aware map transitions:
 
-```json
-{
-  "id": "fair-entrance",
-  "x": 5,
-  "y": 3,
-  "passage": "FairEntrance_Day1",
-  "name": "Fair Entrance",
-  "conditions": [
-    {
-      "type": "variable",
-      "variable": "player.currentDay",
-      "operator": "==",
-      "value": 1
-    }
-  ]
-}
+```javascript
+// From eastern road
+<<link "Enter City">>
+    <<script>>
+    MapSystem.setCurrentMap('city-map', null, 'entry-east');
+    <</script>>
+<</link>>
+
+// From teleportation
+<<link "Teleport to City">>
+    <<script>>
+    MapSystem.setCurrentMap('city-map', null, 'entry-teleport');
+    <</script>>
+<</link>>
 ```
 
-Implementation in passage:
+### 2. Tag-Based Events
+
+Trigger events based on location tags:
+
 ```javascript
-<<if $player.currentDay == 1>>
-    <<set _passageName = "FairEntrance_Day1">>
-<<elseif $player.currentDay == 2>>
-    <<set _passageName = "FairEntrance_Day2">>
+// In StoryCaption or header passage
+<<if MapSystem.currentLocationHasTag('shop')>>
+    <<set $canShop = true>>
 <<else>>
-    <<set _passageName = "FairEntrance_Day3">>
+    <<set $canShop = false>>
 <</if>>
 
-<<goto _passageName>>
+<<if MapSystem.currentLocationHasTag('dangerous')>>
+    <<if random(1, 10) <= 3>>
+        <<goto "RandomEncounter">>
+    <</if>>
+<</if>>
 ```
 
-### 2. Complex Transition Conditions
+### 3. Conditional Node States
 
-Multiple condition types can be combined:
+Nodes can change based on game state:
 
 ```json
 {
-  "type": "one-way",
-  "direction": "north",
   "conditions": [
     {
-      "type": "item",
-      "item": "torch",
-      "operator": ">=",
-      "value": 1
-    },
-    {
       "type": "variable",
-      "variable": "player.stats.courage",
-      "operator": ">=",
-      "value": 5
+      "name": "timeOfDay",
+      "operator": "==",
+      "value": "night",
+      "name": "Shop (Closed)",
+      "icon": "lock",
+      "passage": "ShopClosed"
     }
   ]
 }
 ```
 
-### 3. Custom Condition Evaluation
+### 4. Complex Transition Logic
 
-Extend the condition system:
+Transitions with dynamic conditions:
 
-```javascript
-// Add custom condition type
-MapSystem.evaluateCondition = function(condition) {
-    switch (condition.type) {
-        case "custom":
-            return this.evaluateCustomCondition(condition);
-        default:
-            // Original evaluation logic
+```json
+{
+  "transitions": {
+    "north": {
+      "type": "locked",
+      "conditions": [
+        {
+          "action": "changeIf",
+          "type": "variable",
+          "name": "bridgeRepaired",
+          "operator": "==",
+          "value": true,
+          "changeTarget": "bidirectional"
+        }
+      ]
     }
-};
-
-MapSystem.evaluateCustomCondition = function(condition) {
-    // Your custom logic here
-    return true;
-};
+  }
+}
 ```
 
-### 4. Map Transitions
+### 5. Visual Feedback Integration
 
-Switch between different maps:
+Use CSS classes for dynamic styling:
 
-```javascript
-// In a passage that connects maps
-<<script>>
-MapSystem.setCurrentMap('world-map', { x: 10, y: 5 });
-<</script>>
+```css
+/* Highlight safe zones */
+.tile-node.tag-safe {
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
 
-You emerge from the dungeon into the bright sunlight of the world map.
-```
+/* Warning for dangerous areas */
+.tile-node.tag-dangerous {
+    animation: pulse-danger 2s infinite;
+}
 
-### 5. Save/Load Integration
-
-The system automatically saves to `State.variables.player.mapState`:
-
-```javascript
-// Manual save
-State.variables.player.mapState = {
-    currentMapId: MapSystem.currentMap.mapId,
-    position: MapSystem.currentPosition,
-    revealedTiles: Object.fromEntries(MapSystem.revealedTiles)
-};
-
-// Manual load
-if (State.variables.player.mapState.currentMapId) {
-    MapSystem.setCurrentMap(
-        State.variables.player.mapState.currentMapId,
-        State.variables.player.mapState.position
-    );
+@keyframes pulse-danger {
+    0%, 100% { box-shadow: 0 0 5px rgba(255, 0, 0, 0.5); }
+    50% { box-shadow: 0 0 20px rgba(255, 0, 0, 0.8); }
 }
 ```
 
@@ -638,177 +694,143 @@ if (State.variables.player.mapState.currentMapId) {
 - Verify JSON syntax with validator
 - Ensure web server serves JSON files
 - Check browser console for fetch errors
+- Verify map data includes all required fields
 
-#### 2. Movement Not Working
-**Problem**: Keyboard/mouse movement doesn't respond
+#### 2. Transitions Not Showing
+**Problem**: Transition arrows/indicators missing
 **Solutions**:
-- Verify `MapSystem.init()` was called
-- Check if movement is blocked: `MapSystem.movementBlocked`
-- Ensure current map is set: `MapSystem.currentMap`
-- Verify node exists at current position
+- Check transition format in JSON matches new structure
+- Verify CSS includes transition indicator styles
+- Ensure `updateTransitionConnectors()` is called after import
+- Check that transition types are valid
 
-#### 3. Icons Not Displaying
-**Problem**: Lucide icons don't show
+#### 3. Entry Points Not Working
+**Problem**: Player spawns at wrong location
 **Solutions**:
-- Include Lucide CDN: `<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>`
-- Call `lucide.createIcons()` after DOM updates
-- Check icon names match Lucide library
+- Verify entry point tags are correctly set
+- Check `entryPointRegistry` in map data
+- Ensure node has `entry-` prefixed tag
+- Verify `setCurrentMap()` includes entry point parameter
 
-#### 4. Fog of War Issues
-**Problem**: Tiles not revealing properly
+#### 4. Tags Not Applying
+**Problem**: Tag-based logic not working
 **Solutions**:
-- Verify `fogOfWar: true` in map data
-- Check `State.variables.player.mapState.revealedTiles`
-- Ensure `revealTile()` is called on movement
+- Check tags array in node data
+- Verify tag names are consistent
+- Ensure `projectTagLibrary` is populated
+- Check CSS classes match tag format
 
-#### 5. Condition Evaluation Errors
-**Problem**: Transitions not respecting conditions
+#### 5. Styles Not Rendering
+**Problem**: Node colors/patterns not showing
 **Solutions**:
-- Verify condition syntax in JSON
-- Check variable paths exist: `State.variables.player.stats.strength`
-- Ensure inventory structure: `State.variables.inventory_player`
-- Test condition evaluation manually
+- Verify style object format in node data
+- Check CSS includes pattern classes
+- Ensure `applyAllNodeStyling()` is called
+- Verify color values are valid hex codes
 
-### Debug Tools
+### Debug Commands
 
-#### Console Commands
 ```javascript
-// Check current state
+// Check current map state
 console.log(MapSystem.currentMap);
-console.log(MapSystem.currentPosition);
-console.log(State.variables.player.mapState);
+console.log(MapSystem.getCurrentNodeTags());
+console.log(MapSystem.getMapMetadata());
 
-// Test movement
-MapSystem.movePlayer('north');
+// Test entry points
+console.log(MapSystem.getAvailableEntryPoints());
+MapSystem.teleportToEntryPoint('entry-default');
 
-// Check conditions
-MapSystem.canMoveTo('east');
+// Validate transitions
+const node = MapSystem.getNodeAt(5, 3);
+console.log(node.transitions);
 
-// Reveal all tiles (debug)
-for (let x = 1; x <= 10; x++) {
-    for (let y = 1; y <= 10; y++) {
-        MapSystem.revealTile(MapSystem.currentMap.mapId, x, y);
-    }
-}
-```
-
-#### Validation Script
-```javascript
-// Validate map data
-function validateMap(mapData) {
-    const errors = [];
-    
-    if (!mapData.mapId) errors.push("Missing mapId");
-    if (!mapData.gridSize) errors.push("Missing gridSize");
-    if (!Array.isArray(mapData.nodes)) errors.push("Invalid nodes array");
-    
-    mapData.nodes.forEach((node, index) => {
-        if (!node.x || !node.y) errors.push(`Node ${index}: Missing coordinates`);
-        if (!node.passage) errors.push(`Node ${index}: Missing passage`);
-    });
-    
-    return errors;
-}
+// Check tag library
+console.log(Array.from(MapSystem.currentMap.projectTagLibrary));
 ```
 
 ---
 
 ## Examples
 
-### Example 1: Simple Village Map
+### Example 1: City Map with Entry Points
 
-**Map Data** (`village.json`):
 ```json
 {
-  "mapId": "village",
-  "name": "Village Center",
-  "gridSize": { "width": 5, "height": 5 },
-  "fogOfWar": false,
-  "playerStartPosition": { "x": 3, "y": 3 },
+  "mapId": "city",
+  "name": "Grand City",
+  "region": "urban",
+  "gridSize": { "width": 10, "height": 10 },
   "nodes": [
     {
-      "id": "village-center",
-      "x": 3,
-      "y": 3,
-      "passage": "VillageCenter",
-      "name": "Village Square",
-      "icon": "home",
+      "column": 1,
+      "row": 5,
+      "name": "East Gate",
+      "passage": "CityEastGate",
+      "icon": "door-open",
+      "tags": ["exterior", "entry-east", "guarded"],
       "transitions": {
-        "north": { "type": "bidirectional", "conditions": [] },
-        "east": { "type": "bidirectional", "conditions": [] }
+        "west": { "type": "bidirectional" }
       }
     },
     {
-      "id": "blacksmith",
-      "x": 3,
-      "y": 2,
-      "passage": "Blacksmith",
-      "name": "Blacksmith Shop",
-      "icon": "hammer",
-      "transitions": {
-        "south": { "type": "bidirectional", "conditions": [] }
+      "column": 5,
+      "row": 5,
+      "name": "Market Square",
+      "passage": "MarketSquare",
+      "icon": "shopping-bag",
+      "tags": ["public", "shop", "crowded"],
+      "style": {
+        "primaryColor": "#FFD700",
+        "pattern": "dots"
       }
     }
-  ]
+  ],
+  "entryPointRegistry": {
+    "entry-east": "1,5",
+    "entry-west": "9,5",
+    "entry-teleport": "5,5"
+  }
 }
 ```
 
-**Passage Implementation**:
-```html
-:: VillageCenter
-You stand in the heart of the village. The blacksmith's hammer rings from the north.
+### Example 2: Dungeon with Conditional Transitions
 
-<<script>>
-MapSystem.setCurrentMap('village', { x: 3, y: 3 });
-<</script>>
-
-:: Blacksmith
-The blacksmith greets you with a nod as sparks fly from his forge.
-
-<<script>>
-MapSystem.setCurrentMap('village', { x: 3, y: 2 });
-<</script>>
-```
-
-### Example 2: Dungeon with Locked Doors
-
-**Map Data** (`dungeon.json`):
 ```json
 {
   "mapId": "dungeon",
-  "name": "Ancient Dungeon",
-  "gridSize": { "width": 7, "height": 5 },
+  "name": "Ancient Crypt",
+  "region": "underground",
   "fogOfWar": true,
-  "playerStartPosition": { "x": 1, "y": 3 },
   "nodes": [
     {
-      "id": "entrance",
-      "x": 1,
-      "y": 3,
-      "passage": "DungeonEntrance",
-      "name": "Entrance",
-      "icon": "door-open",
-      "transitions": {
-        "east": { "type": "bidirectional", "conditions": [] }
-      }
-    },
-    {
-      "id": "locked-room",
-      "x": 5,
-      "y": 3,
-      "passage": "LockedRoom",
-      "name": "Locked Chamber",
+      "column": 3,
+      "row": 3,
+      "name": "Sealed Chamber",
+      "passage": "SealedChamber",
       "icon": "lock",
+      "tags": ["interior", "dangerous", "treasure"],
+      "conditions": [
+        {
+          "type": "item",
+          "name": "ancient_key",
+          "operator": ">=",
+          "value": 1,
+          "name": "Ancient Treasury",
+          "icon": "coins",
+          "passage": "Treasury"
+        }
+      ],
       "transitions": {
-        "west": {
-          "type": "one-way",
-          "direction": "west",
+        "north": {
+          "type": "locked",
           "conditions": [
             {
-              "type": "item",
-              "item": "dungeon_key",
-              "operator": ">=",
-              "value": 1
+              "action": "changeIf",
+              "type": "variable",
+              "name": "leverPulled",
+              "operator": "==",
+              "value": true,
+              "changeTarget": "bidirectional"
             }
           ]
         }
@@ -818,64 +840,85 @@ MapSystem.setCurrentMap('village', { x: 3, y: 2 });
 }
 ```
 
-### Example 3: Dynamic Fair Map
+### Example 3: Dynamic Day/Night Map
 
-**Map Data** (`fair.json`):
-```json
-{
-  "mapId": "fair",
-  "name": "Three Day Fair",
-  "gridSize": { "width": 6, "height": 4 },
-  "fogOfWar": false,
-  "playerStartPosition": { "x": 3, "y": 4 },
-  "nodes": [
-    {
-      "id": "main-stage",
-      "x": 3,
-      "y": 2,
-      "passage": "MainStage_Day1",
-      "name": "Main Stage",
-      "icon": "music",
-      "conditions": [
-        {
-          "type": "variable",
-          "variable": "world.currentDay",
-          "operator": "==",
-          "value": 1
-        }
-      ],
-      "transitions": {
-        "south": { "type": "bidirectional", "conditions": [] }
-      }
-    }
-  ]
-}
-```
+```javascript
+// In passage
+:: TownSquare
+<<set _currentHour = $gameTime.hour>>
+<<set _isDaytime = _currentHour >= 6 && _currentHour <= 18>>
 
-**Dynamic Passage Selection**:
-```html
-:: MainStage_Day1
-<<if $world.currentDay == 1>>
-    The opening ceremony is in full swing!
-<<elseif $world.currentDay == 2>>
-    Merchants hawk their wares loudly.
+<<if _isDaytime>>
+    The town square bustles with activity. Merchants hawk their wares.
+    <<if MapSystem.currentLocationHasTag('shop')>>
+        [[Visit Shops|ShoppingInterface]]
+    <</if>>
 <<else>>
-    The closing celebration has begun!
+    The square is quiet and dark. Most shops are closed.
+    <<if MapSystem.currentLocationHasTag('tavern')>>
+        The tavern remains open, light spilling from its windows.
+        [[Enter Tavern|TavernInterior]]
+    <</if>>
 <</if>>
+
+<!-- Apply time-based styling -->
+<<script>>
+const hour = State.variables.gameTime.hour;
+const isDark = hour < 6 || hour > 18;
+$('.current-node').toggleClass('nighttime', isDark);
+<</script>>
 ```
+
+---
+
+## Migration Guide
+
+### From Basic to Enhanced System
+
+1. **Update Map Data Format**:
+   - Change `x/y` to `column/row` (optional, both supported)
+   - Add `tags` arrays to nodes
+   - Add `style` objects for visual customization
+   - Include `entryPointRegistry` at map level
+   - Add `passageTexts` for content storage
+
+2. **Update Transitions**:
+   - Convert old transition format to direction-based object
+   - Add condition arrays to transitions
+   - Support new transition types (locked, secret)
+
+3. **Enhance Passages**:
+   - Add tag-based logic checks
+   - Implement entry point spawning
+   - Use new utility functions
+
+4. **Update Styling**:
+   - Include new CSS pattern classes
+   - Add tag-based styling rules
+   - Support dynamic color application
+
+### Backward Compatibility
+
+The enhanced system maintains full backward compatibility:
+- Old coordinate formats (`x/y`) still work
+- Simple transitions auto-convert to new format
+- Missing features default gracefully
+- Legacy condition formats are supported
 
 ---
 
 ## Conclusion
 
-This map system provides a robust foundation for grid-based navigation in Twine games. The combination of visual feedback, keyboard controls, and conditional logic creates an engaging exploration experience that integrates seamlessly with SugarCube 2's variable system.
+The Enhanced Twine Map System provides a robust, feature-rich foundation for creating complex, interactive maps in Twine games. With support for entry points, tags, visual styling, and advanced conditions, it enables sophisticated gameplay mechanics while maintaining ease of use.
 
-For additional support or advanced customization, refer to the source code comments and the included map editor tool for visual map creation.
+The system integrates seamlessly with the Map Builder Tool, allowing visual creation and editing of maps with full feature support. The combination of visual feedback, flexible navigation, and rich metadata creates engaging exploration experiences.
+
+For additional support or advanced customization, refer to the source code comments and the Map Builder Tool documentation.
 
 ---
 
-**Version**: 2.0  
+**Version**: 1.0  
 **Compatible with**: Twine 2.3+, SugarCube 2.30+  
 **Dependencies**: Lucide Icons (CDN), jQuery (included with SugarCube)  
 **License**: Free for any use
-
+**Map Builder Tool**: Included for visual map creation and editing
