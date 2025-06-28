@@ -1,0 +1,196 @@
+{
+  "mapId": "test-map",
+  "name": "Test",
+  "gridSize": {
+    "width": 5,
+    "height": 5
+  },
+  "defaultStart": {
+    "x": 2,
+    "y": 2
+  },
+  "nodes": [
+    {
+      "column": 2,
+      "row": 2,
+      "name": "center",
+      "passage": "center",
+      "icon": "align-center",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {},
+      "conditions": [],
+      "transitions": {
+        "west": {
+          "type": "locked",
+          "conditions": [
+            {
+              "action": "changeIf",
+              "type": "variable",
+              "name": "VisitedTop",
+              "operator": "==",
+              "value": "true",
+              "changeTarget": "bidirectional"
+            }
+          ]
+        },
+        "east": {
+          "type": "one-way",
+          "conditions": [],
+          "direction": "east"
+        },
+        "south": {
+          "type": "one-way",
+          "conditions": [],
+          "direction": "south"
+        },
+        "north": {
+          "type": "one-way",
+          "conditions": [],
+          "direction": "south"
+        }
+      }
+    },
+    {
+      "column": 2,
+      "row": 3,
+      "name": "bottom",
+      "passage": "bottom",
+      "icon": "",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {},
+      "conditions": [],
+      "transitions": {
+        "north": {
+          "type": "one-way",
+          "conditions": [],
+          "direction": "south"
+        },
+        "east": {
+          "type": "bidirectional",
+          "conditions": []
+        }
+      }
+    },
+    {
+      "column": 3,
+      "row": 3,
+      "name": "bottom-right",
+      "passage": "bottom-right",
+      "icon": "",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {},
+      "conditions": [],
+      "transitions": {
+        "west": {
+          "type": "bidirectional",
+          "conditions": []
+        },
+        "north": {
+          "type": "bidirectional",
+          "conditions": []
+        }
+      }
+    },
+    {
+      "column": 3,
+      "row": 2,
+      "name": "right",
+      "passage": "right",
+      "icon": "arrow-right",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {},
+      "conditions": [],
+      "transitions": {
+        "west": {
+          "type": "one-way",
+          "conditions": [],
+          "direction": "east"
+        },
+        "south": {
+          "type": "bidirectional",
+          "conditions": []
+        },
+        "north": {
+          "type": "bidirectional",
+          "conditions": []
+        }
+      }
+    },
+    {
+      "column": 3,
+      "row": 1,
+      "name": "top-right",
+      "passage": "top-right",
+      "icon": "arrow-up-right",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {},
+      "conditions": [],
+      "transitions": {
+        "south": {
+          "type": "bidirectional",
+          "conditions": []
+        },
+        "west": {
+          "type": "bidirectional",
+          "conditions": []
+        }
+      }
+    },
+    {
+      "column": 2,
+      "row": 1,
+      "name": "top",
+      "passage": "top",
+      "icon": "arrow-up",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {},
+      "conditions": [],
+      "transitions": {
+        "east": {
+          "type": "bidirectional",
+          "conditions": []
+        },
+        "south": {
+          "type": "one-way",
+          "conditions": [],
+          "direction": "south"
+        }
+      }
+    },
+    {
+      "column": 1,
+      "row": 2,
+      "name": "left",
+      "passage": "left",
+      "icon": "arrow-left",
+      "fogOfWar": false,
+      "tags": [],
+      "style": {},
+      "conditions": [],
+      "transitions": {
+        "east": {
+          "type": "locked",
+          "conditions": [
+            {
+              "action": "changeIf",
+              "type": "variable",
+              "name": "VisitedTop",
+              "operator": "==",
+              "value": "true",
+              "changeTarget": "bidirectional"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "passageTexts": {},
+  "projectTagLibrary": [],
+  "entryPointRegistry": {}
+}
