@@ -82,8 +82,10 @@ function initializeApp() {
         toggleTheme();
     }
     
+    // Initialize color picker for condition modal
+    updateConditionModalWithColorPicker();
+    
     // Only show setup modal if no autosave was restored
-    // This check happens after setupEventListeners() which includes setupAutoSave()
     if (mapData.nodes.size === 0) {
         showSetupModal();
     }
@@ -234,6 +236,9 @@ function generateGrid() {
             grid.appendChild(cell);
         }
     }
+    
+    // Re-setup cell click handlers for Ctrl+Click selection
+    setupCellClickHandlers();
 }
 
 function createGridCell(col, row) {
@@ -242,8 +247,8 @@ function createGridCell(col, row) {
     cell.dataset.col = col;
     cell.dataset.row = row;
     
-    // Add click handler for node editing
-    cell.addEventListener('click', () => editNode(col, row));
+    // Add click handler for node editing - pass the event
+    cell.addEventListener('click', (event) => editNode(col, row, event));
     
     // Create transition connectors
     createTransitionConnectors(cell, col, row);
@@ -291,11 +296,18 @@ function updateCellDisplay(cell, col, row) {
 
     if (nodeData) {
         cell.classList.add('filled');
-        cell.classList.toggle('fog-of-war', !!nodeData.fogOfWar);
 
-        // Apply visual styles
+        // Apply styling
         applyNodeStyling(cell, nodeData);
 
+        // Apply fog of war
+        if (nodeData.fogOfWar) {
+            cell.classList.add('fog-of-war');
+        } else {
+            cell.classList.remove('fog-of-war');
+        }
+
+        // Create content
         const content = document.createElement('div');
         content.className = 'node-content';
 
@@ -315,41 +327,39 @@ function updateCellDisplay(cell, col, row) {
             content.appendChild(nameElement);
         }
 
-        // Tags (optional display)
-        if (nodeData.tags && nodeData.tags.length > 0) {
-            const tagsElement = document.createElement('div');
-            tagsElement.className = 'node-tags';
-            tagsElement.textContent = nodeData.tags.slice(0, 2).join(', ');
-            if (nodeData.tags.length > 2) {
-                tagsElement.textContent += '...';
-            }
-            content.appendChild(tagsElement);
-        }
-
         // Coordinates
         const coordsElement = document.createElement('div');
         coordsElement.className = 'node-coords';
         coordsElement.textContent = `(${col},${row})`;
         content.appendChild(coordsElement);
 
+        // Tags - handle both old and new format
+        if (nodeData.tags && nodeData.tags.length > 0) {
+            const tagsElement = document.createElement('div');
+            tagsElement.className = 'node-tags';
+            // Ensure we're working with an array
+            const tagsArray = Array.isArray(nodeData.tags) ? nodeData.tags : [nodeData.tags];
+            tagsElement.textContent = tagsArray.filter(tag => tag).join(', ');
+            content.appendChild(tagsElement);
+        }
+
         cell.appendChild(content);
 
+        // Apply entry point styling
+        if (nodeData.entryPoint) {
+            cell.classList.add('entry-point');
+        }
+
+        // Re-render Lucide icons
         if (window.lucide) {
-            lucide.createIcons();
+            window.lucide.createIcons();
         }
     } else {
-        // Clear classes if empty
-        cell.classList.remove('filled', 'fog-of-war');
-
+        cell.classList.remove('filled', 'fog-of-war', 'entry-point');
         const emptyText = document.createElement('div');
         emptyText.className = 'empty-node-text';
-        emptyText.textContent = 'Empty Node';
+        emptyText.textContent = `(${col},${row})`;
         cell.appendChild(emptyText);
-
-        const coordsElement = document.createElement('div');
-        coordsElement.className = 'node-coords';
-        coordsElement.textContent = `(${col},${row})`;
-        cell.appendChild(coordsElement);
     }
 
     // Ensure transition visuals are refreshed
@@ -417,49 +427,41 @@ function editNode(col, row, event) {
     const nodeData = mapData.nodes.get(nodeKey) || {};
 
     // Memory support
-    if (typeof selectedTags !== 'undefined') selectedTags.clear();
+    selectedTags.clear(); // Clear current tags
     const loadedFromMemory = typeof loadNodeMemory === 'function' ? loadNodeMemory(col, row) : false;
 
     if (!loadedFromMemory) {
-        // Basic fields
+        // Populate form fields
         document.getElementById('nodeName').value = nodeData.name || '';
         document.getElementById('passageName').value = nodeData.passage || '';
         document.getElementById('nodeIcon').value = nodeData.icon || '';
         document.getElementById('fogOfWar').checked = nodeData.fogOfWar || false;
-
-        // Tags
-        if (typeof loadTagsFromNodeData === 'function') {
+        
+        // Load tags - handle both old array format and new format
+        if (nodeData.tags) {
             loadTagsFromNodeData(nodeData.tags);
-        } else if (document.getElementById('nodeTags')) {
-            document.getElementById('nodeTags').value = (nodeData.tags || []).join(', ');
+        }
+        
+        // Update icon selection UI
+        if (window.updateIconSelection) {
+            window.updateIconSelection(nodeData.icon || '');
         }
 
-        // Entry point loader
-        if (typeof loadEntryPointFromNodeData === 'function') {
+        // Update node conditions
+        updateNodeConditionsList(nodeData.conditions || []);
+
+        // Load colors into picker
+        if (window.nodeColorPicker && nodeData.style) {
+            window.nodeColorPicker.setColors(
+                nodeData.style.primaryColor || '#007bff',
+                nodeData.style.secondaryColor || '#6c757d'
+            );
+            document.getElementById('nodePattern').value = nodeData.style.pattern || 'none';
+        }
+
+        // Load entry point data
+        if (nodeData.entryPoint) {
             loadEntryPointFromNodeData(nodeData);
-        }
-
-        // Style fields
-        const style = nodeData.style || {};
-        document.getElementById('nodePrimaryColor').value = style.primaryColor || '#007bff';
-        document.getElementById('nodeSecondaryColor').value = style.secondaryColor || '#6c757d';
-        document.getElementById('nodePattern').value = style.pattern || 'none';
-
-        // Conditions
-        if (typeof updateNodeConditionsList === 'function') {
-            updateNodeConditionsList(nodeData.conditions || []);
-        }
-
-        // Robust Icon Handling
-        if (typeof updateIconSelection === 'function' && nodeData.hasOwnProperty('icon')) {
-            const iconValue = nodeData.icon || '';
-            setTimeout(() => {
-                if (iconValue !== '') {
-                    updateIconSelection(iconValue);
-                } else if (typeof clearIconSelection === 'function') {
-                    clearIconSelection();
-                }
-            }, 150);
         }
     }
 
@@ -468,14 +470,56 @@ function editNode(col, row, event) {
         populateTransitionControls(col, row);
     }
 
-    // Show editor UI
+    // Show sidebar UI
     document.getElementById('nodeEditor').classList.remove('hidden');
     document.getElementById('transitionEditor').classList.add('hidden');
     document.getElementById('sidebarTitle').textContent = `Edit Node (${col},${row})`;
     document.getElementById('sidebar').classList.remove('hidden');
 }
 
+function loadNodeMemory(col, row) {
+    const nodeKey = `${col},${row}`;
+    const memory = nodeMemory.get(nodeKey);
 
+    if (memory) {
+        document.getElementById('nodeName').value = memory.name;
+        document.getElementById('passageName').value = memory.passage;
+        document.getElementById('nodeIcon').value = memory.icon;
+        document.getElementById('fogOfWar').checked = memory.fogOfWar;
+        
+        // Load tags from memory
+        if (memory.tags) {
+            selectedTags.clear();
+            if (Array.isArray(memory.tags)) {
+                memory.tags.forEach(tag => {
+                    selectedTags.add(tag);
+                    projectTagLibrary.add(tag);
+                });
+            } else if (memory.tags instanceof Set) {
+                memory.tags.forEach(tag => {
+                    selectedTags.add(tag);
+                    projectTagLibrary.add(tag);
+                });
+            }
+            updateTagChipsDisplay();
+        }
+        
+        updateNodeConditionsList(memory.conditions || []);
+
+        // Load transitions
+        document.getElementById('transition-north').value = memory.transitions.north;
+        document.getElementById('transition-west').value = memory.transitions.west;
+        document.getElementById('transition-east').value = memory.transitions.east;
+        document.getElementById('transition-south').value = memory.transitions.south;
+
+        if (window.updateIconSelection) {
+            window.updateIconSelection(memory.icon || '');
+        }
+
+        return true;
+    }
+    return false;
+}
 
 function editTransition(fromCol, fromRow, toCol, toRow, direction) {
     currentEditingTransition = { fromCol, fromRow, toCol, toRow, direction };
@@ -637,20 +681,31 @@ function saveNode({ useSelectedTags = false, updateTransitions = false, updateEn
     const icon = document.getElementById('nodeIcon').value;
     const fogOfWar = document.getElementById('fogOfWar').checked;
 
-    // Get tags
-    const tags = useSelectedTags
-        ? Array.from(selectedTags)
-        : (document.getElementById('nodeTags')?.value.trim().split(',').map(t => t.trim()).filter(Boolean) || []);
+    // Always get tags from selectedTags Set
+    const tags = Array.from(selectedTags);
 
-    // Style + Conditions
-    const style = {
-        primaryColor: document.getElementById('nodePrimaryColor')?.value || '#007bff',
-        secondaryColor: document.getElementById('nodeSecondaryColor')?.value || '#6c757d',
-        pattern: document.getElementById('nodePattern')?.value || 'none'
-    };
+    // Get style from new color picker
+    let style = { primaryColor: '#007bff', secondaryColor: '#6c757d', pattern: 'none' };
+    if (window.nodeColorPicker) {
+        const colors = window.nodeColorPicker.getColors();
+        const pattern = document.querySelector('#nodeColorPicker .pattern-select')?.value || 'none';
+        style = {
+            primaryColor: colors.primary,
+            secondaryColor: colors.secondary,
+            pattern: pattern
+        };
+
+        // Add colors to recent only when saving
+        if (window.colorPickerSystem) {
+            colorPickerSystem.addRecentColor(colors.primary);
+            if (colors.secondary !== '#6c757d') {
+                colorPickerSystem.addRecentColor(colors.secondary);
+            }
+        }
+    }
+
     const conditions = getCurrentNodeConditions();
 
-    // Transitions (if used)
     const transitions = {
         north: document.getElementById('transition-north')?.value || '',
         west:  document.getElementById('transition-west')?.value || '',
@@ -676,7 +731,17 @@ function saveNode({ useSelectedTags = false, updateTransitions = false, updateEn
 
         if (updateEntryPoints) {
             const entryTag = tags.find(tag => tag.startsWith('entry-'));
-            if (entryTag) entryPointRegistry.set(entryTag, nodeKey);
+            if (entryTag) {
+                const entryType = entryTag.substring(6);
+                entryPointRegistry.set(entryType, nodeKey);
+            } else {
+                for (const [type, key] of entryPointRegistry) {
+                    if (key === nodeKey) {
+                        entryPointRegistry.delete(type);
+                        break;
+                    }
+                }
+            }
         }
     } else {
         mapData.nodes.delete(nodeKey);
@@ -684,17 +749,21 @@ function saveNode({ useSelectedTags = false, updateTransitions = false, updateEn
         if (updateTransitions) {
             ['north','west','east','south'].forEach(dir => {
                 const [dx, dy] = directionOffsets[dir];
-                const tCol = col + dx;
-                const tRow = row + dy;
-                mapData.transitions.delete(`${col},${row}-${tCol},${tRow}`);
-                mapData.transitions.delete(`${tCol},${tRow}-${col},${row}`);
+                const targetCol = col + dx;
+                const targetRow = row + dy;
+                const transitionKey = `${col},${row}-${targetCol},${targetRow}`;
+                const reverseKey = `${targetCol},${targetRow}-${col},${row}`;
+                mapData.transitions.delete(transitionKey);
+                mapData.transitions.delete(reverseKey);
+                updateTransitionConnectors(targetCol, targetRow);
             });
         }
 
         if (updateEntryPoints) {
-            for (const [type, registeredNodeKey] of entryPointRegistry.entries()) {
-                if (registeredNodeKey === nodeKey) {
+            for (const [type, key] of entryPointRegistry) {
+                if (key === nodeKey) {
                     entryPointRegistry.delete(type);
+                    break;
                 }
             }
         }
@@ -703,13 +772,19 @@ function saveNode({ useSelectedTags = false, updateTransitions = false, updateEn
     nodeMemory.delete(nodeKey);
 
     const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
-    updateCellDisplay(cell, col, row);
-    applyNodeStyling(cell, mapData.nodes.get(nodeKey));
+    if (cell) {
+        updateCellDisplay(cell, col, row);
+        const updatedNodeData = mapData.nodes.get(nodeKey);
+        if (updatedNodeData) {
+            applyNodeStyling(cell, updatedNodeData);
+        }
+    }
 
     if (updateEntryPoints) updateEntryPointVisuals();
 
     closeSidebar();
 }
+
 
 
 function clearNode() {
@@ -1049,8 +1124,53 @@ async function exportMap({ usePrompt = true, includeExtras = false } = {}) {
 
 
 // Import map functionality
-function importMap() {
-    document.getElementById('fileInput').click();
+async function importMap() {
+    if (supportsFileSystemAccess()) {
+        try {
+            const [handle] = await window.showOpenFilePicker({
+                types: [{
+                    description: 'JSON Files',
+                    accept: { 'application/json': ['.json'] }
+                }],
+                multiple: false
+            });
+            
+            const file = await handle.getFile();
+            const content = await file.text();
+            
+            try {
+                const importedData = JSON.parse(content);
+                
+                // Basic structure validation
+                if (!importedData.name || !Array.isArray(importedData.nodes)) {
+                    alert('Invalid map file format');
+                    return;
+                }
+                
+                pendingImportData = importedData;
+                
+                // If a map is already loaded, ask how to proceed
+                if (mapData.nodes.size > 0) {
+                    showImportChoiceModal();
+                } else {
+                    showTwineFileModal(importedData);
+                }
+            } catch (error) {
+                alert('Error reading file: Invalid JSON format');
+                console.error('Import error:', error);
+            }
+        } catch (err) {
+            // User cancelled or error occurred
+            if (err.name !== 'AbortError') {
+                console.error('Error using File System Access API:', err);
+                // Fall back to file input
+                document.getElementById('fileInput').click();
+            }
+        }
+    } else {
+        // Fallback for browsers that don't support File System Access API
+        document.getElementById('fileInput').click();
+    }
 }
 
 function handleFileImport(event) {
@@ -1090,22 +1210,27 @@ function handleFileImport(event) {
 function loadImportedMap(importedData) {
     // Validate structure
     if (!importedData.name || !Array.isArray(importedData.nodes)) {
-        alert('Invalid map file format');
+        alert('Invalid map format. Missing required fields.');
         return;
     }
 
     // Determine grid size
     let width = 5, height = 5;
     if (importedData.gridSize) {
-        width = importedData.gridSize.width;
-        height = importedData.gridSize.height;
+        width = importedData.gridSize.width || 5;
+        height = importedData.gridSize.height || 5;
     } else {
+        // Calculate from node positions
+        let maxCol = 0, maxRow = 0;
         importedData.nodes.forEach(node => {
-            const col = node.x ?? node.column;
-            const row = node.y ?? node.row;
-            width = Math.max(width, col + 1);
-            height = Math.max(height, row + 1);
+            // Handle different coordinate formats
+            const col = node.column !== undefined ? node.column : (node.col !== undefined ? node.col : node.x);
+            const row = node.row !== undefined ? node.row : (node.y !== undefined ? node.y : node.row);
+            maxCol = Math.max(maxCol, col);
+            maxRow = Math.max(maxRow, row);
         });
+        width = Math.max(5, maxCol + 1);
+        height = Math.max(5, maxRow + 1);
     }
 
     // Initialize map
@@ -1117,39 +1242,49 @@ function loadImportedMap(importedData) {
         transitions: new Map()
     };
 
+    // Clear and rebuild tag library
+    projectTagLibrary.clear();
+
     // Load nodes
     importedData.nodes.forEach(node => {
-        const col = node.x ?? node.column;
-        const row = node.y ?? node.row;
+        // Handle different coordinate formats
+        const col = node.column !== undefined ? node.column : (node.col !== undefined ? node.col : node.x);
+        const row = node.row !== undefined ? node.row : (node.y !== undefined ? node.y : node.row);
+        
+        const nodeKey = `${col},${row}`;
+        const nodeData = {
+            name: node.name || '',
+            passage: node.passage || '',
+            icon: node.icon || '',
+            fogOfWar: node.fogOfWar || false,
+            tags: node.tags || [],  // Preserve original format
+            conditions: node.conditions || [],
+            style: node.style || null,
+            entryPoint: node.entryPoint || null
+        };
 
-        setNodeData(col, row, {
-            name: node.name,
-            passage: node.passage,
-            icon: node.icon,
-            fogOfWar: node.fogOfWar,
-            tags: node.tags,
-            conditions: node.conditions,
-            style: node.style,
-            transitions: node.transitions
-        });
+        mapData.nodes.set(nodeKey, nodeData);
 
-        // Load transitions into transition map
-        if (node.transitions) {
-            Object.entries(node.transitions).forEach(([direction, transition]) => {
-                let targetCol = col, targetRow = row;
-                switch (direction) {
-                    case 'north': targetRow--; break;
-                    case 'south': targetRow++; break;
-                    case 'east':  targetCol++; break;
-                    case 'west':  targetCol--; break;
+        // Build tag library from imported tags
+        if (nodeData.tags && Array.isArray(nodeData.tags)) {
+            nodeData.tags.forEach(tag => {
+                if (typeof tag === 'string' && tag.trim()) {
+                    projectTagLibrary.add(tag.trim());
                 }
+            });
+        }
 
-                const key = `${col},${row}-${targetCol},${targetRow}`;
-                mapData.transitions.set(key, {
-                    type: transition.type ?? 'bidirectional',
-                    direction: transition.direction ?? null,
-                    conditions: transition.conditions ?? []
-                });
+        // Load transitions
+        if (node.transitions) {
+            Object.entries(node.transitions).forEach(([type, data]) => {
+                if (data && data.target) {
+                    const transitionKey = `${col},${row}-${data.target.col},${data.target.row}`;
+                    mapData.transitions.set(transitionKey, {
+                        type: type,
+                        direction: data.direction || null,
+                        conditions: data.conditions || []
+                    });
+                }
             });
         }
     });
@@ -1195,6 +1330,7 @@ function saveNodeMemory() {
         passage: document.getElementById('passageName').value,
         icon: document.getElementById('nodeIcon').value,
         fogOfWar: document.getElementById('fogOfWar').checked,
+        tags: Array.from(selectedTags), // Store as array for consistency
         conditions: getCurrentNodeConditions(),
         transitions: {
             north: document.getElementById('transition-north').value,
@@ -1207,27 +1343,32 @@ function saveNodeMemory() {
     nodeMemory.set(nodeKey, memory);
 }
 
-function loadNodeMemory(col, row) {
-    const nodeKey = `${col},${row}`;
-    const memory = nodeMemory.get(nodeKey);
-
-    if (memory) {
-        document.getElementById('nodeName').value = memory.name || '';
-        document.getElementById('passageName').value = memory.passage || '';
-        document.getElementById('nodeIcon').value = memory.icon || '';
-        document.getElementById('fogOfWar').checked = memory.fogOfWar || false;
-        updateNodeConditionsList(memory.conditions || []);
-        if (memory.transitions) {
-            document.getElementById('transition-north').value = memory.transitions.north || 'none';
-            document.getElementById('transition-west').value = memory.transitions.west || 'none';
-            document.getElementById('transition-east').value = memory.transitions.east || 'none';
-            document.getElementById('transition-south').value = memory.transitions.south || 'none';
-        } else {
-            populateTransitionControls(col, row);
+function loadTagsFromNodeData(tags) {
+    selectedTags.clear();
+    
+    // Handle both array format (old) and any other format
+    if (tags) {
+        if (Array.isArray(tags)) {
+            // Old format: array of strings
+            tags.forEach(tag => {
+                if (typeof tag === 'string' && tag.trim()) {
+                    selectedTags.add(tag.trim());
+                    projectTagLibrary.add(tag.trim());
+                }
+            });
+        } else if (typeof tags === 'string') {
+            // Handle comma-separated string format
+            tags.split(',').forEach(tag => {
+                const trimmedTag = tag.trim();
+                if (trimmedTag) {
+                    selectedTags.add(trimmedTag);
+                    projectTagLibrary.add(trimmedTag);
+                }
+            });
         }
-        return true;
     }
-    return false;
+    
+    updateTagChipsDisplay();
 }
 
 
@@ -1312,6 +1453,40 @@ function getCurrentNodeConditions() {
     return conditions;
 }
 
+// Add this function after your existing condition modal functions (around line 1315)
+function initializeNodeConditionColorPicker() {
+    // Add color picker to the node condition modal
+    const modal = document.getElementById('nodeConditionModal');
+    if (!modal) return;
+    
+    // Find the form groups container
+    const formGroups = modal.querySelector('.form-groups');
+    if (!formGroups) return;
+    
+    // Create style section
+    const styleSection = document.createElement('div');
+    styleSection.className = 'form-group condition-style-section';
+    styleSection.innerHTML = `
+        <label>Condition Style (Optional)</label>
+        <div class="help-text">Apply custom colors when this condition is active</div>
+        <div id="nodeConditionColorPicker"></div>
+    `;
+    
+    // Insert before the description field
+    const descriptionGroup = modal.querySelector('.form-group:last-child');
+    formGroups.insertBefore(styleSection, descriptionGroup);
+    
+    // Create color picker instance
+    window.nodeConditionColorPicker = colorPickerSystem.createInstance('nodeConditionColorPicker', {
+        primaryColor: '#ffc107',
+        secondaryColor: '#6c757d',
+        showPattern: true,
+        onColorChange: (colors) => {
+            // Store colors temporarily
+            window.currentNodeConditionColors = colors;
+        }
+    });
+}
 
 // Full exportTwineFile function using modern file picker with fallback
 async function exportTwineFile() {
@@ -1440,6 +1615,17 @@ function showNodeConditionModal() {
     
     // Initialize condition icon grid
     renderConditionIconGrid();
+    
+    // Initialize color picker if not already done
+    if (!document.getElementById('nodeConditionColorPicker')) {
+        initializeNodeConditionColorPicker();
+    }
+    
+    // Reset color picker to defaults
+    if (window.nodeConditionColorPicker) {
+        window.nodeConditionColorPicker.setColors('#ffc107', '#6c757d');
+        window.currentNodeConditionColors = null;
+    }
 }
 
 function hideNodeConditionModal() {
@@ -1472,8 +1658,20 @@ function handleNodeConditionSubmit(e) {
         description: description || null
     };
     
+    // Add style if color picker was used
+    if (window.currentNodeConditionColors) {
+        nodeCondition.style = {
+            primaryColor: window.currentNodeConditionColors.primary,
+            secondaryColor: window.currentNodeConditionColors.secondary,
+            pattern: window.currentNodeConditionColors.pattern || 'none'
+        };
+    }
+    
     addNodeStateConditionToList(nodeCondition);
     hideNodeConditionModal();
+    
+    // Reset condition colors
+    window.currentNodeConditionColors = null;
 }
 
 function addNodeStateConditionToList(condition) {
@@ -1506,6 +1704,7 @@ function addNodeStateConditionToList(condition) {
     conditionText.innerHTML = `
         <strong>If:</strong> ${displayText}<br>
         <strong>Then:</strong> Use passage "${condition.passage}"${condition.icon ? ` with icon "${condition.icon}"` : ''}
+        ${condition.style ? '<br><span class="style-indicator">🎨 Custom style</span>' : ''}
         ${condition.description ? `<br><em>${condition.description}</em>` : ''}
     `;
     
@@ -2269,8 +2468,44 @@ function cancelPlacement() {
 
 // Dual file upload functionality
 function setupTwineFileModalListeners() {
-    document.getElementById('uploadTwineFile').addEventListener('click', () => {
-        document.getElementById('twFileInput').click();
+    document.getElementById('uploadTwineFile').addEventListener('click', async () => {
+        if (supportsFileSystemAccess()) {
+            try {
+                const [handle] = await window.showOpenFilePicker({
+                    types: [{
+                        description: 'Twine Files',
+                        accept: { 'text/plain': ['.tw'] }
+                    }],
+                    multiple: false
+                });
+                
+                const file = await handle.getFile();
+                const content = await file.text();
+                
+                // Show processing status
+                document.getElementById('twineUploadStatus').classList.remove('hidden');
+                document.getElementById('twineStatusIcon').textContent = '⏳';
+                document.getElementById('twineStatusText').textContent = 'Processing .tw file...';
+                
+                try {
+                    twineFileContent = content;
+                    processTwineFile(twineFileContent);
+                } catch (error) {
+                    document.getElementById('twineStatusIcon').textContent = '❌';
+                    document.getElementById('twineStatusText').textContent = 'Error reading .tw file';
+                    console.error('Twine file import error:', error);
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Error using File System Access API:', err);
+                    // Fall back to file input
+                    document.getElementById('twFileInput').click();
+                }
+            }
+        } else {
+            // Fallback
+            document.getElementById('twFileInput').click();
+        }
     });
     
     document.getElementById('skipTwineFile').addEventListener('click', () => {
@@ -2506,8 +2741,11 @@ function setupCellClickHandlers() {
 }
 
 function handleCellClick(e) {
-    // Don't interfere with normal editing if not holding Ctrl
-    if (!e.ctrlKey && !e.metaKey) return;
+    // Only handle Ctrl+Click for selection
+    if (!e.ctrlKey && !e.metaKey) {
+        // Let the event bubble up to the normal editNode handler
+        return;
+    }
     
     e.preventDefault();
     e.stopPropagation();
@@ -2908,25 +3146,24 @@ function bulkAddTags() {
     navigationState.selectedNodes.forEach(nodeKey => {
         const nodeData = mapData.nodes.get(nodeKey);
         if (nodeData) {
-            // Ensure tags array exists
-            if (!nodeData.tags) nodeData.tags = [];
+            // Ensure tags is an array
+            if (!Array.isArray(nodeData.tags)) {
+                nodeData.tags = [];
+            }
             
-            // Add new tags without duplicating
+            // Add new tags that don't already exist
             tagsToAdd.forEach(tag => {
                 if (!nodeData.tags.includes(tag)) {
                     nodeData.tags.push(tag);
-                    projectTagLibrary.add(tag); // Add to project library
+                    projectTagLibrary.add(tag);
                 }
             });
             
             updatedCount++;
             
-            // Update cell display
+            // Update display
             const [col, row] = nodeKey.split(',').map(Number);
-            const cell = document.querySelector(`[data-col="${col}"][data-row="${row}"]`);
-            if (cell) {
-                updateCellDisplay(cell, col, row);
-            }
+            updateCellDisplay(document.querySelector(`[data-col="${col}"][data-row="${row}"]`), col, row);
         }
     });
     
@@ -3040,50 +3277,8 @@ function createBulkStyleModal() {
                 </div>
                 
                 <div class="form-group">
-                    <label for="bulkPrimaryColor">Primary Color</label>
-                    <div class="color-input-group">
-                        <input type="color" id="bulkPrimaryColor" value="#007bff">
-                        <div class="color-presets">
-                            <div class="color-preset" data-color="#007bff" style="background-color: #007bff"></div>
-                            <div class="color-preset" data-color="#28a745" style="background-color: #28a745"></div>
-                            <div class="color-preset" data-color="#dc3545" style="background-color: #dc3545"></div>
-                            <div class="color-preset" data-color="#ffc107" style="background-color: #ffc107"></div>
-                            <div class="color-preset" data-color="#17a2b8" style="background-color: #17a2b8"></div>
-                            <div class="color-preset" data-color="#6610f2" style="background-color: #6610f2"></div>
-                            <div class="color-preset" data-color="#e83e8c" style="background-color: #e83e8c"></div>
-                            <div class="color-preset" data-color="#fd7e14" style="background-color: #fd7e14"></div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="bulkSecondaryColor">Secondary Color</label>
-                    <div class="color-input-group">
-                        <input type="color" id="bulkSecondaryColor" value="#6c757d">
-                        <div class="color-presets">
-                            <div class="color-preset" data-color="#6c757d" style="background-color: #6c757d"></div>
-                            <div class="color-preset" data-color="#343a40" style="background-color: #343a40"></div>
-                            <div class="color-preset" data-color="#f8f9fa" style="background-color: #f8f9fa"></div>
-                            <div class="color-preset" data-color="#e9ecef" style="background-color: #e9ecef"></div>
-                            <div class="color-preset" data-color="#dee2e6" style="background-color: #dee2e6"></div>
-                            <div class="color-preset" data-color="#ced4da" style="background-color: #ced4da"></div>
-                            <div class="color-preset" data-color="#adb5bd" style="background-color: #adb5bd"></div>
-                            <div class="color-preset" data-color="#868e96" style="background-color: #868e96"></div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="bulkPattern">Pattern</label>
-                    <select id="bulkPattern">
-                        <option value="none">None</option>
-                        <option value="diagonal-stripes">Diagonal Stripes</option>
-                        <option value="vertical-stripes">Vertical Stripes</option>
-                        <option value="horizontal-stripes">Horizontal Stripes</option>
-                        <option value="dots">Dots</option>
-                        <option value="grid">Grid</option>
-                        <option value="checkerboard">Checkerboard</option>
-                    </select>
+                    <label>Colors & Pattern</label>
+                    <div id="bulkColorPicker"></div>
                 </div>
                 
                 <div class="form-group preview-group">
@@ -3108,46 +3303,52 @@ function createBulkStyleModal() {
     
     document.body.appendChild(modal);
     
-    // Setup event listeners
+    // Create color picker instance for bulk editor
+    const bulkPicker = colorPickerSystem.createInstance('bulkColorPicker', {
+        primaryColor: '#007bff',
+        secondaryColor: '#6c757d',
+        showPattern: true,
+        onColorChange: (colors) => {
+            updateBulkStylePreview();
+        }
+    });
+    
+    // Store reference
+    window.bulkColorPicker = bulkPicker;
+    
+    // Setup event listeners AFTER the modal is added to DOM
     setupBulkStyleModalListeners();
 }
 
 function setupBulkStyleModalListeners() {
     // Icon search and selection
     const iconSearch = document.getElementById('bulkIconSearch');
-    iconSearch.addEventListener('input', (e) => {
-        renderBulkIconGrid(e.target.value);
-    });
+    if (iconSearch) {
+        iconSearch.addEventListener('input', (e) => {
+            renderBulkIconGrid(e.target.value);
+        });
+    }
     
     // Clear icon button
-    document.getElementById('bulkClearIcon').addEventListener('click', () => {
-        clearBulkIconSelection();
-        updateBulkStylePreview();
-    });
-    
-    // Color preset handlers
-    document.querySelectorAll('#bulkStyleModal .color-preset').forEach(preset => {
-        preset.addEventListener('click', function() {
-            const color = this.dataset.color;
-            const input = this.closest('.color-input-group').querySelector('input[type="color"]');
-            input.value = color;
-            
-            // Update preset selection
-            this.parentNode.querySelectorAll('.color-preset').forEach(p => p.classList.remove('selected'));
-            this.classList.add('selected');
-            
+    const clearIconBtn = document.getElementById('bulkClearIcon');
+    if (clearIconBtn) {
+        clearIconBtn.addEventListener('click', () => {
+            clearBulkIconSelection();
             updateBulkStylePreview();
         });
-    });
+    }
     
-    // Color input changes
-    document.getElementById('bulkPrimaryColor').addEventListener('change', updateBulkStylePreview);
-    document.getElementById('bulkSecondaryColor').addEventListener('change', updateBulkStylePreview);
-    document.getElementById('bulkPattern').addEventListener('change', updateBulkStylePreview);
+    // Action buttons - these are the main fixes
+    const applyBtn = document.getElementById('applyBulkStyles');
+    const cancelBtn = document.getElementById('cancelBulkStyles');
     
-    // Action buttons
-    document.getElementById('applyBulkStyles').addEventListener('click', applyBulkStyles);
-    document.getElementById('cancelBulkStyles').addEventListener('click', closeBulkStyleModal);
+    if (applyBtn) {
+        applyBtn.addEventListener('click', applyBulkStyles);
+    }
+    
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', closeBulkStyleModal);
+    }
 }
 
 function initializeBulkStyleModal() {
@@ -3284,15 +3485,37 @@ function updateBulkStylePreview() {
 }
 
 function applyBulkStyles() {
-    const icon = document.getElementById('bulkNodeIcon').value;
-    const primaryColor = document.getElementById('bulkPrimaryColor').value;
-    const secondaryColor = document.getElementById('bulkSecondaryColor').value;
-    const pattern = document.getElementById('bulkPattern').value;
+    if (navigationState.selectedNodes.size === 0) {
+        alert('No nodes selected.');
+        return;
+    }
+    
+    const icon = document.getElementById('bulkNodeIcon')?.value || '';
+    
+    // Get colors from bulk color picker
+    let colors = { primary: '#007bff', secondary: '#6c757d' };
+    let pattern = 'none';
+    
+    if (window.bulkColorPicker) {
+        colors = window.bulkColorPicker.getColors();
+        const patternSelect = document.querySelector('#bulkColorPicker .pattern-select');
+        if (patternSelect) {
+            pattern = patternSelect.value || 'none';
+        }
+    }
     
     let updatedCount = 0;
     
     navigationState.selectedNodes.forEach(nodeKey => {
-        const nodeData = mapData.nodes.get(nodeKey);
+        let nodeData = mapData.nodes.get(nodeKey);
+        
+        // Create node data if it doesn't exist
+        if (!nodeData) {
+            const [col, row] = nodeKey.split(',').map(Number);
+            setNodeData(col, row, {});
+            nodeData = mapData.nodes.get(nodeKey);
+        }
+        
         if (nodeData) {
             // Update icon if one was selected
             if (icon) {
@@ -3301,8 +3524,8 @@ function applyBulkStyles() {
             
             // Update style
             if (!nodeData.style) nodeData.style = {};
-            nodeData.style.primaryColor = primaryColor;
-            nodeData.style.secondaryColor = secondaryColor;
+            nodeData.style.primaryColor = colors.primary;
+            nodeData.style.secondaryColor = colors.secondary;
             nodeData.style.pattern = pattern;
             
             updatedCount++;
@@ -3317,12 +3540,23 @@ function applyBulkStyles() {
         }
     });
     
+    // Add colors to recent
+    if (window.colorPickerSystem) {
+        colorPickerSystem.addRecentColor(colors.primary);
+        if (colors.secondary !== '#6c757d') {
+            colorPickerSystem.addRecentColor(colors.secondary);
+        }
+    }
+    
     closeBulkStyleModal();
     alert(`Updated styles for ${updatedCount} nodes.`);
 }
 
 function closeBulkStyleModal() {
-    document.getElementById('bulkStyleModal').classList.add('hidden');
+    const modal = document.getElementById('bulkStyleModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
 }
 
 // NEW: Additional bulk selection functions
@@ -3615,6 +3849,659 @@ function applyBulkTransitions() {
     alert(`Applied ${transitionType} transitions to ${navigationState.selectedNodes.size} selected nodes.`);
 }
 
+function updateConditionModalWithColorPicker() {
+    // Add color picker container to condition modal if it has style options
+    const conditionModal = document.getElementById('conditionModal');
+    if (!conditionModal) return;
+    
+    // Find or create style section
+    let styleSection = conditionModal.querySelector('.condition-style-section');
+    if (!styleSection) {
+        styleSection = document.createElement('div');
+        styleSection.className = 'condition-style-section form-group';
+        styleSection.innerHTML = `
+            <label>Condition Style (Optional)</label>
+            <div id="conditionColorPicker"></div>
+        `;
+        
+        // Insert before form actions
+        const formActions = conditionModal.querySelector('.form-actions');
+        formActions.parentNode.insertBefore(styleSection, formActions);
+    }
+    
+    // Create color picker instance
+    const conditionPicker = colorPickerSystem.createInstance('conditionColorPicker', {
+        primaryColor: '#ffc107',
+        secondaryColor: '#6c757d',
+        showPattern: false,
+        onColorChange: (colors) => {
+            // Store colors for condition
+            if (window.currentConditionColors) {
+                window.currentConditionColors = colors;
+            }
+        }
+    });
+    
+    window.conditionColorPicker = conditionPicker;
+}
+
+
+// Color Picker System
+class ColorPickerSystem {
+    constructor() {
+        this.recentColors = this.loadRecentColors();
+        this.maxRecentColors = 10;
+        this.activeInstances = new Map();
+    }
+    
+    loadRecentColors() {
+        const stored = localStorage.getItem('twine-map-recent-colors');
+        return stored ? JSON.parse(stored) : [];
+    }
+    
+    saveRecentColors() {
+        localStorage.setItem('twine-map-recent-colors', JSON.stringify(this.recentColors));
+    }
+    
+    addRecentColor(color) {
+        // Normalize color to hex
+        const hex = this.normalizeColor(color);
+        
+        // Remove if already exists
+        const index = this.recentColors.indexOf(hex);
+        if (index > -1) {
+            this.recentColors.splice(index, 1);
+        }
+        
+        // Add to front
+        this.recentColors.unshift(hex);
+        
+        // Trim to max
+        if (this.recentColors.length > this.maxRecentColors) {
+            this.recentColors = this.recentColors.slice(0, this.maxRecentColors);
+        }
+        
+        this.saveRecentColors();
+        this.updateAllInstances();
+    }
+    
+    normalizeColor(color) {
+        // Convert any color format to hex
+        const div = document.createElement('div');
+        div.style.color = color;
+        document.body.appendChild(div);
+        const computed = window.getComputedStyle(div).color;
+        document.body.removeChild(div);
+        
+        // Convert rgb to hex
+        const match = computed.match(/\d+/g);
+        if (match) {
+            const [r, g, b] = match.map(Number);
+            return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+        }
+        return color;
+    }
+    
+    createInstance(containerId, options = {}) {
+        const instance = new ColorPickerInstance(this, containerId, options);
+        this.activeInstances.set(containerId, instance);
+        return instance;
+    }
+    
+    updateAllInstances() {
+        this.activeInstances.forEach(instance => instance.updateRecentColors());
+    }
+}
+
+
+class ColorPickerInstance {
+    constructor(system, containerId, options) {
+        this.system = system;
+        this.container = document.getElementById(containerId);
+        this.options = {
+            primaryColor: '#007bff',
+            secondaryColor: '#6c757d',
+            showPattern: true,
+            onColorChange: null,
+            ...options
+        };
+        
+        this.activeSwatch = 'primary';
+        this.colors = {
+            primary: this.options.primaryColor,
+            secondary: this.options.secondaryColor
+        };
+        
+        this.currentHue = 0;
+        this.currentSaturation = 100;
+        this.currentLightness = 50;
+        
+        this.render();
+        this.attachEventListeners();
+        this.updateCursorsFromColor(this.colors[this.activeSwatch]);
+    }
+    
+    render() {
+        this.container.innerHTML = `
+            <div class="unified-color-picker">
+                <div class="color-swatches">
+                    <div class="swatch-group">
+                        <label>Primary</label>
+                        <div class="color-swatch primary active" data-swatch="primary" style="background-color: ${this.colors.primary}"></div>
+                    </div>
+                    <div class="swatch-group">
+                        <label>Secondary</label>
+                        <div class="color-swatch secondary" data-swatch="secondary" style="background-color: ${this.colors.secondary}"></div>
+                    </div>
+                </div>
+                
+                <div class="color-picker-main">
+                    <div class="color-gradient-picker">
+                        <canvas class="color-canvas" width="200" height="150"></canvas>
+                        <div class="color-cursor"></div>
+                    </div>
+                    <div class="color-slider">
+                        <canvas class="hue-canvas" width="20" height="150"></canvas>
+                        <div class="hue-cursor"></div>
+                    </div>
+                </div>
+                
+                <div class="color-inputs">
+                    <div class="hex-input-group">
+                        <label>HEX</label>
+                        <input type="text" class="hex-input" value="${this.colors[this.activeSwatch]}" placeholder="#000000">
+                    </div>
+                    <div class="rgb-inputs">
+                        <div class="rgb-group">
+                            <label>R</label>
+                            <input type="number" class="rgb-r" min="0" max="255" value="0">
+                        </div>
+                        <div class="rgb-group">
+                            <label>G</label>
+                            <input type="number" class="rgb-g" min="0" max="255" value="0">
+                        </div>
+                        <div class="rgb-group">
+                            <label>B</label>
+                            <input type="number" class="rgb-b" min="0" max="255" value="0">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="recent-colors-section">
+                    <label>Recent:</label>
+                    <div class="recent-colors"></div>
+                </div>
+                
+                ${this.options.showPattern ? `
+                    <div class="pattern-selector">
+                        <label>Pattern:</label>
+                        <select class="pattern-select">
+                            <option value="none">None</option>
+                            <option value="diagonal-stripes">Diagonal Stripes</option>
+                            <option value="vertical-stripes">Vertical Stripes</option>
+                            <option value="horizontal-stripes">Horizontal Stripes</option>
+                            <option value="dots">Dots</option>
+                            <option value="grid">Grid</option>
+                            <option value="checkerboard">Checkerboard</option>
+                        </select>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        
+        this.initializeColorCanvas();
+        this.updateRecentColors();
+        this.updateColorInputs();
+    }
+    
+    initializeColorCanvas() {
+        this.colorCanvas = this.container.querySelector('.color-canvas');
+        this.colorCtx = this.colorCanvas.getContext('2d');
+        this.hueCanvas = this.container.querySelector('.hue-canvas');
+        this.hueCtx = this.hueCanvas.getContext('2d');
+        
+        this.drawHueSlider();
+        this.drawColorGradient(0);
+    }
+    
+    drawHueSlider() {
+        const gradient = this.hueCtx.createLinearGradient(0, 0, 0, 150);
+        for (let i = 0; i <= 360; i += 60) {
+            gradient.addColorStop(i / 360, `hsl(${i}, 100%, 50%)`);
+        }
+        this.hueCtx.fillStyle = gradient;
+        this.hueCtx.fillRect(0, 0, 20, 150);
+    }
+    
+    drawColorGradient(hue) {
+        // Create saturation gradient (left to right)
+        const satGradient = this.colorCtx.createLinearGradient(0, 0, 200, 0);
+        satGradient.addColorStop(0, `hsl(${hue}, 0%, 50%)`);
+        satGradient.addColorStop(1, `hsl(${hue}, 100%, 50%)`);
+        this.colorCtx.fillStyle = satGradient;
+        this.colorCtx.fillRect(0, 0, 200, 150);
+        
+        // Create lightness gradient (top to bottom)
+        const lightGradient = this.colorCtx.createLinearGradient(0, 0, 0, 150);
+        lightGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        lightGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+        lightGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0)');
+        lightGradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
+        this.colorCtx.fillStyle = lightGradient;
+        this.colorCtx.fillRect(0, 0, 200, 150);
+    }
+    
+
+    attachEventListeners() {
+        // Swatch selection
+        this.container.querySelectorAll('.color-swatch').forEach(swatch => {
+            swatch.addEventListener('click', () => this.selectSwatch(swatch.dataset.swatch));
+        });
+        
+        // Color canvas interaction with drag support
+        let isDragging = false;
+        this.colorCanvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            this.handleColorCanvasClick(e);
+            const handleDrag = (e) => {
+                if (isDragging) this.handleColorCanvasClick(e);
+            };
+            const handleRelease = () => {
+                isDragging = false;
+                document.removeEventListener('mousemove', handleDrag);
+                document.removeEventListener('mouseup', handleRelease);
+            };
+            document.addEventListener('mousemove', handleDrag);
+            document.addEventListener('mouseup', handleRelease);
+        });
+        
+        // Hue canvas interaction with drag support
+        let isHueDragging = false;
+        this.hueCanvas.addEventListener('mousedown', (e) => {
+            isHueDragging = true;
+            this.handleHueCanvasClick(e);
+            const handleDrag = (e) => {
+                if (isHueDragging) this.handleHueCanvasClick(e);
+            };
+            const handleRelease = () => {
+                isHueDragging = false;
+                document.removeEventListener('mousemove', handleDrag);
+                document.removeEventListener('mouseup', handleRelease);
+            };
+            document.addEventListener('mousemove', handleDrag);
+            document.addEventListener('mouseup', handleRelease);
+        });
+        
+        // Input changes
+        this.container.querySelector('.hex-input').addEventListener('input', (e) => {
+            this.updateFromHex(e.target.value);
+        });
+        
+        ['r', 'g', 'b'].forEach(channel => {
+            this.container.querySelector(`.rgb-${channel}`).addEventListener('input', () => {
+                this.updateFromRGB();
+            });
+        });
+        
+        // Recent color clicks
+        this.container.querySelector('.recent-colors').addEventListener('click', (e) => {
+            if (e.target.classList.contains('recent-color')) {
+                this.setColor(e.target.dataset.color);
+            }
+        });
+        
+        // Pattern change
+        if (this.options.showPattern) {
+            this.container.querySelector('.pattern-select').addEventListener('change', (e) => {
+                if (this.options.onColorChange) {
+                    this.options.onColorChange({
+                        primary: this.colors.primary,
+                        secondary: this.colors.secondary,
+                        pattern: e.target.value
+                    });
+                }
+            });
+        }
+    }
+
+
+    handleColorCanvasClick(e) {
+        const rect = this.colorCanvas.getBoundingClientRect();
+        const x = Math.max(0, Math.min(200, e.clientX - rect.left));
+        const y = Math.max(0, Math.min(150, e.clientY - rect.top));
+        
+        // Update cursor position
+        const cursor = this.container.querySelector('.color-cursor');
+        cursor.style.left = `${x}px`;
+        cursor.style.top = `${y}px`;
+        
+        // Get color at position
+        const imageData = this.colorCtx.getImageData(x, y, 1, 1);
+        const [r, g, b] = imageData.data;
+        const hex = this.rgbToHex(r, g, b);
+        
+        this.setColor(hex, false); // false = don't update cursors since we're manually positioning
+    }
+    
+    handleHueCanvasClick(e) {
+        const rect = this.hueCanvas.getBoundingClientRect();
+        const y = Math.max(0, Math.min(150, e.clientY - rect.top));
+        const hue = (y / 150) * 360;
+        
+        // Update cursor position
+        const cursor = this.container.querySelector('.hue-cursor');
+        cursor.style.top = `${y}px`;
+        cursor.style.left = '50%';
+        
+        this.currentHue = hue;
+        this.drawColorGradient(hue);
+        
+        // Update the color to match the new hue while maintaining saturation/lightness
+        const currentColor = this.colors[this.activeSwatch];
+        const currentRgb = this.hexToRgb(currentColor);
+        const currentHsl = this.rgbToHsl(currentRgb.r, currentRgb.g, currentRgb.b);
+        
+        // Convert back to RGB with new hue
+        const newRgb = this.hslToRgb(hue, currentHsl.s, currentHsl.l);
+        const newHex = this.rgbToHex(newRgb.r, newRgb.g, newRgb.b);
+        
+        this.setColor(newHex, false);
+    }
+    
+    hslToRgb(h, s, l) {
+        h = h / 360;
+        s = s / 100;
+        l = l / 100;
+        
+        let r, g, b;
+        
+        if (s === 0) {
+            r = g = b = l;
+        } else {
+            const hue2rgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1/6) return p + (q - p) * 6 * t;
+                if (t < 1/2) return q;
+                if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                return p;
+            };
+            
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+            r = hue2rgb(p, q, h + 1/3);
+            g = hue2rgb(p, q, h);
+            b = hue2rgb(p, q, h - 1/3);
+        }
+        
+        return {
+            r: Math.round(r * 255),
+            g: Math.round(g * 255),
+            b: Math.round(b * 255)
+        };
+    }
+    
+    selectSwatch(swatch) {
+        this.activeSwatch = swatch;
+        
+        // Update active state
+        this.container.querySelectorAll('.color-swatch').forEach(s => {
+            s.classList.toggle('active', s.dataset.swatch === swatch);
+        });
+        
+        // Update color inputs to show active swatch color
+        this.updateColorInputs();
+    }
+    
+    handleColorCanvasClick(e) {
+        const rect = this.colorCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        // Get color at position
+        const imageData = this.colorCtx.getImageData(x, y, 1, 1);
+        const [r, g, b] = imageData.data;
+        const hex = this.rgbToHex(r, g, b);
+        
+        this.setColor(hex);
+    }
+    
+    handleHueCanvasClick(e) {
+        const rect = this.hueCanvas.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const hue = (y / 150) * 360;
+        
+        this.drawColorGradient(hue);
+        this.currentHue = hue;
+    }
+    
+    setColor(color, updateCursors = true) {
+        this.colors[this.activeSwatch] = color;
+        
+        // Update swatch
+        this.container.querySelector(`.color-swatch.${this.activeSwatch}`).style.backgroundColor = color;
+        
+        // Update inputs
+        this.updateColorInputs();
+        
+        // Update cursors if needed
+        if (updateCursors) {
+            this.updateCursorsFromColor(color);
+        }
+        
+        // DON'T add to recent colors here - only on save
+        
+        // Trigger callback
+        if (this.options.onColorChange) {
+            this.options.onColorChange({
+                primary: this.colors.primary,
+                secondary: this.colors.secondary,
+                pattern: this.container.querySelector('.pattern-select')?.value || 'none'
+            });
+        }
+    }
+    
+    updateFromHex(hex) {
+        if (/^#[0-9A-F]{6}$/i.test(hex)) {
+            this.setColor(hex);
+        }
+    }
+    
+    updateFromRGB() {
+        const r = parseInt(this.container.querySelector('.rgb-r').value) || 0;
+        const g = parseInt(this.container.querySelector('.rgb-g').value) || 0;
+        const b = parseInt(this.container.querySelector('.rgb-b').value) || 0;
+        const hex = this.rgbToHex(r, g, b);
+        this.setColor(hex);
+    }
+    
+    updateColorInputs() {
+        const color = this.colors[this.activeSwatch];
+        const rgb = this.hexToRgb(color);
+        
+        this.container.querySelector('.hex-input').value = color;
+        this.container.querySelector('.rgb-r').value = rgb.r;
+        this.container.querySelector('.rgb-g').value = rgb.g;
+        this.container.querySelector('.rgb-b').value = rgb.b;
+    }
+    
+    updateRecentColors() {
+        const container = this.container.querySelector('.recent-colors');
+        container.innerHTML = this.system.recentColors
+            .map(color => `<div class="recent-color" data-color="${color}" style="background-color: ${color}"></div>`)
+            .join('');
+    }
+    
+    rgbToHex(r, g, b) {
+        return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    }
+    
+    hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : { r: 0, g: 0, b: 0 };
+    }
+    
+    getColors() {
+        return { ...this.colors };
+    }
+    
+    setColors(primary, secondary) {
+        this.colors.primary = primary;
+        this.colors.secondary = secondary;
+        
+        // Update swatch colors
+        this.container.querySelector('.color-swatch.primary').style.backgroundColor = primary;
+        this.container.querySelector('.color-swatch.secondary').style.backgroundColor = secondary;
+        
+        // Update inputs to reflect the active swatch
+        this.updateColorInputs();
+        
+        // Update cursors to reflect the new color
+        this.updateCursorsFromColor(this.colors[this.activeSwatch]);
+    }
+
+    updateCursorsFromColor(hex) {
+        const rgb = this.hexToRgb(hex);
+        const hsl = this.rgbToHsl(rgb.r, rgb.g, rgb.b);
+        
+        // Update hue cursor
+        const hueY = (hsl.h / 360) * 150;
+        const hueCursor = this.container.querySelector('.hue-cursor');
+        if (hueCursor) {
+            hueCursor.style.top = `${hueY}px`;
+            hueCursor.style.left = '50%';
+        }
+        
+        // Redraw color gradient with new hue
+        this.currentHue = hsl.h;
+        this.drawColorGradient(hsl.h);
+        
+        // Update color cursor position
+        const colorX = (hsl.s / 100) * 200;
+        const colorY = ((100 - hsl.l) / 100) * 150;
+        
+        const colorCursor = this.container.querySelector('.color-cursor');
+        if (colorCursor) {
+            colorCursor.style.left = `${colorX}px`;
+            colorCursor.style.top = `${colorY}px`;
+        }
+    }
+
+    rgbToHsl(r, g, b) {
+        r /= 255;
+        g /= 255;
+        b /= 255;
+        
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        let h, s, l = (max + min) / 2;
+        
+        if (max === min) {
+            h = s = 0;
+        } else {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            
+            switch (max) {
+                case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+                case g: h = ((b - r) / d + 2) / 6; break;
+                case b: h = ((r - g) / d + 4) / 6; break;
+            }
+        }
+        
+        return {
+            h: Math.round(h * 360),
+            s: Math.round(s * 100),
+            l: Math.round(l * 100)
+        };
+    }
+
+    // Add keyboard support
+    attachKeyboardListeners() {
+        this.container.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab' && !e.shiftKey) {
+                // Switch between swatches
+                e.preventDefault();
+                const newSwatch = this.activeSwatch === 'primary' ? 'secondary' : 'primary';
+                this.selectSwatch(newSwatch);
+            } else if (e.key === 'Enter') {
+                // Confirm color selection
+                this.system.addRecentColor(this.colors[this.activeSwatch]);
+            }
+        });
+    }
+
+    // Add eyedropper functionality
+    addEyedropperTool() {
+        const button = document.createElement('button');
+        button.className = 'eyedropper-btn';
+        button.innerHTML = '<i data-lucide="pipette"></i>';
+        button.title = 'Pick color from map';
+        
+        button.addEventListener('click', () => {
+            this.startEyedropper();
+        });
+        
+        this.container.querySelector('.color-inputs').appendChild(button);
+    }
+
+    startEyedropper() {
+        document.body.style.cursor = 'crosshair';
+        
+        const handleClick = (e) => {
+            const cell = e.target.closest('.grid-cell');
+            if (cell) {
+                const computedStyle = window.getComputedStyle(cell);
+                const bgColor = computedStyle.backgroundColor;
+                this.setColor(this.system.normalizeColor(bgColor));
+            }
+            
+            document.body.style.cursor = '';
+            document.removeEventListener('click', handleClick);
+        };
+        
+        document.addEventListener('click', handleClick);
+    }
+
+    // Add preset palettes
+    addPresetPalettes() {
+        const palettes = {
+            'Forest': ['#228B22', '#8B4513', '#006400', '#8FBC8F'],
+            'Ocean': ['#006994', '#0099CC', '#40E0D0', '#1E90FF'],
+            'Sunset': ['#FF6347', '#FF8C00', '#FFD700', '#FF1493'],
+            'Monochrome': ['#000000', '#404040', '#808080', '#C0C0C0']
+        };
+        
+        const paletteContainer = document.createElement('div');
+        paletteContainer.className = 'preset-palettes';
+        paletteContainer.innerHTML = `
+            <label>Presets:</label>
+            <select class="palette-select">
+                <option value="">Choose palette...</option>
+                ${Object.keys(palettes).map(name => 
+                    `<option value="${name}">${name}</option>`
+                ).join('')}
+            </select>
+        `;
+        
+        paletteContainer.querySelector('.palette-select').addEventListener('change', (e) => {
+            const palette = palettes[e.target.value];
+            if (palette) {
+                // Add palette colors to recent
+                palette.forEach(color => this.system.addRecentColor(color));
+            }
+        });
+        
+        this.container.querySelector('.recent-colors-section').after(paletteContainer);
+    }
+}
+
+// Initialize global color picker system
+const colorPickerSystem = new ColorPickerSystem();
 
 // Undo/Redo System
 function saveState(action) {
@@ -3729,57 +4616,46 @@ function updateUndoRedoButtons() {
 
 // Node Styling System
 function setupStyleControls() {
-    // Color preset click handlers
-    document.querySelectorAll('.color-preset').forEach(preset => {
-        preset.addEventListener('click', function() {
-            const color = this.dataset.color;
-            const isSecondary = this.closest('.color-input-group').querySelector('#nodeSecondaryColor');
-            
-            if (isSecondary) {
-                document.getElementById('nodeSecondaryColor').value = color;
-            } else {
-                document.getElementById('nodePrimaryColor').value = color;
-            }
-            
-            // Update preset selection
-            this.parentNode.querySelectorAll('.color-preset').forEach(p => p.classList.remove('selected'));
-            this.classList.add('selected');
-            
+    const styleContainer = document.querySelector('.style-controls');
+    if (!styleContainer) return;
+    
+    // Clear old content
+    styleContainer.innerHTML = '<div id="nodeColorPicker"></div>';
+    
+    // Create color picker instance for node editor
+    const nodePicker = colorPickerSystem.createInstance('nodeColorPicker', {
+        primaryColor: '#007bff',
+        secondaryColor: '#6c757d',
+        showPattern: true,
+        onColorChange: (colors) => {
             if (currentEditingNode) {
+                // Update node data
+                const nodeKey = `${currentEditingNode.col},${currentEditingNode.row}`;
+                const nodeData = mapData.nodes.get(nodeKey);
+                if (nodeData) {
+                    if (!nodeData.style) nodeData.style = {};
+                    nodeData.style.primaryColor = colors.primary;
+                    nodeData.style.secondaryColor = colors.secondary;
+                    nodeData.style.pattern = colors.pattern;
+                    
+                    // Update visual
+                    const cell = document.querySelector(`[data-col="${currentEditingNode.col}"][data-row="${currentEditingNode.row}"]`);
+                    if (cell) {
+                        updateCellDisplay(cell, currentEditingNode.col, currentEditingNode.row);
+                        applyNodeStyling(cell, nodeData);
+                    }
+                }
                 saveNodeMemory();
             }
-        });
-    });
-    
-    // Color input change handlers
-    document.getElementById('nodePrimaryColor').addEventListener('change', function() {
-        if (currentEditingNode) {
-            saveNodeMemory();
         }
     });
     
-    document.getElementById('nodeSecondaryColor').addEventListener('change', function() {
-        if (currentEditingNode) {
-            saveNodeMemory();
-        }
-    });
-    
-    document.getElementById('nodePattern').addEventListener('change', function() {
-        if (currentEditingNode) {
-            saveNodeMemory();
-        }
-    });
-    
-    // Tags input handler
-    document.getElementById('nodeTags').addEventListener('input', function() {
-        if (currentEditingNode) {
-            saveNodeMemory();
-        }
-    });
+    // Store reference
+    window.nodeColorPicker = nodePicker;
 }
 
 function applyNodeStyling(cell, nodeData) {
-    if (!nodeData.style) return;
+    if (!nodeData || !nodeData.style) return;
 
     const { primaryColor, secondaryColor, pattern } = nodeData.style;
 
@@ -5065,17 +5941,46 @@ function handleKeyboardShortcuts(e) {
 function setupTagSystemListeners() {
     const tagInput = document.getElementById('nodeTags');
     const tagSuggestions = document.getElementById('tagSuggestions');
-    const selectedTagsDisplay = document.getElementById('selectedTagsDisplay');
     
-    if (!tagInput || !tagSuggestions || !selectedTagsDisplay) return;
+    if (!tagInput || !tagSuggestions) return;
+    
+    // Create the new tag container inside the input wrapper
+    const inputWrapper = tagInput.parentElement;
+    inputWrapper.classList.add('tag-input-wrapper');
+    
+    // Create container for tag chips that will appear inside the field
+    const tagChipsContainer = document.createElement('div');
+    tagChipsContainer.className = 'tag-chips-container';
+    inputWrapper.insertBefore(tagChipsContainer, tagInput);
+    
+    // Wrap input in a flex container with chips
+    const inputContainer = document.createElement('div');
+    inputContainer.className = 'tag-input-with-chips';
+    tagChipsContainer.parentNode.insertBefore(inputContainer, tagChipsContainer);
+    inputContainer.appendChild(tagChipsContainer);
+    inputContainer.appendChild(tagInput);
+    
+    // Update input to be minimal and grow with content
+    tagInput.classList.add('tag-input-field');
+    tagInput.placeholder = 'Add tags...';
     
     // Tag input event listeners
     tagInput.addEventListener('input', handleTagInput);
     tagInput.addEventListener('keydown', handleTagKeydown);
     tagInput.addEventListener('blur', hideTagSuggestions);
     
-    // Initialize selected tags display
-    updateSelectedTagsDisplay();
+    // Click on container focuses input
+    inputContainer.addEventListener('click', (e) => {
+        if (e.target === inputContainer || e.target === tagChipsContainer) {
+            tagInput.focus();
+        }
+    });
+    
+    // Remove the old selected tags display
+    const oldDisplay = document.getElementById('selectedTagsDisplay');
+    if (oldDisplay) {
+        oldDisplay.remove();
+    }
 }
 
 function handleTagInput(e) {
@@ -5092,6 +5997,7 @@ function handleTagInput(e) {
 
 function handleTagKeydown(e) {
     const suggestions = document.querySelectorAll('.tag-suggestion:not(.hidden)');
+    const input = e.target;
     
     switch (e.key) {
         case 'ArrowDown':
@@ -5105,34 +6011,29 @@ function handleTagKeydown(e) {
             updateTagSuggestionHighlight();
             break;
         case 'Enter':
+        case ',':
             e.preventDefault();
             if (tagSuggestionIndex >= 0 && suggestions[tagSuggestionIndex]) {
-                selectTagSuggestion(suggestions[tagSuggestionIndex].textContent);
+                selectTagSuggestion(suggestions[tagSuggestionIndex].textContent.replace(' (new)', ''));
             } else {
                 // Add current input as new tag
-                const input = e.target.value;
-                const lastCommaIndex = input.lastIndexOf(',');
-                const currentTag = input.substring(lastCommaIndex + 1).trim();
+                const currentTag = input.value.trim();
                 if (currentTag) {
                     addTag(currentTag);
+                    input.value = '';
                 }
+            }
+            break;
+        case 'Backspace':
+            // If input is empty, remove last tag
+            if (input.value === '' && selectedTags.size > 0) {
+                e.preventDefault();
+                const lastTag = Array.from(selectedTags).pop();
+                removeTag(lastTag);
             }
             break;
         case 'Escape':
             hideTagSuggestions();
-            break;
-        case ',':
-            // Auto-add tag when comma is typed
-            setTimeout(() => {
-                const input = e.target.value;
-                const tags = input.split(',').map(tag => tag.trim()).filter(tag => tag);
-                if (tags.length > selectedTags.size) {
-                    const newTag = tags[tags.length - 1];
-                    if (newTag && !selectedTags.has(newTag)) {
-                        addTag(newTag);
-                    }
-                }
-            }, 0);
             break;
     }
 }
@@ -5199,28 +6100,18 @@ function updateTagSuggestionHighlight() {
 function selectTagSuggestion(tagName) {
     addTag(tagName);
     hideTagSuggestions();
-    
-    // Clear the input after the last comma
-    const tagInput = document.getElementById('nodeTags');
-    const input = tagInput.value;
-    const lastCommaIndex = input.lastIndexOf(',');
-    tagInput.value = input.substring(0, lastCommaIndex + 1).trim();
-    if (tagInput.value && !tagInput.value.endsWith(',')) {
-        tagInput.value += ', ';
-    }
-    tagInput.focus();
 }
 
 function addTag(tagName) {
     if (!tagName || selectedTags.has(tagName)) return;
     
     selectedTags.add(tagName);
-    projectTagLibrary.add(tagName); // Add to project library
-    updateSelectedTagsDisplay();
+    projectTagLibrary.add(tagName);
+    updateTagChipsDisplay();
     
-    // Update the input field
+    // Clear the input
     const tagInput = document.getElementById('nodeTags');
-    tagInput.value = Array.from(selectedTags).join(', ');
+    tagInput.value = '';
     
     if (currentEditingNode) {
         saveNodeMemory();
@@ -5229,15 +6120,60 @@ function addTag(tagName) {
 
 function removeTag(tagName) {
     selectedTags.delete(tagName);
-    updateSelectedTagsDisplay();
-    
-    // Update the input field
-    const tagInput = document.getElementById('nodeTags');
-    tagInput.value = Array.from(selectedTags).join(', ');
+    updateTagChipsDisplay();
     
     if (currentEditingNode) {
         saveNodeMemory();
     }
+}
+
+function updateTagChipsDisplay() {
+    const container = document.querySelector('.tag-chips-container');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    selectedTags.forEach(tagName => {
+        const chip = document.createElement('div');
+        chip.className = 'tag-chip-inline';
+        
+        // Check if it's an entry tag
+        if (tagName.startsWith('entry-')) {
+            chip.classList.add('entry-tag');
+        }
+        
+        const tagText = document.createElement('span');
+        tagText.className = 'tag-chip-text';
+        tagText.textContent = tagName;
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'tag-chip-remove';
+        removeBtn.innerHTML = '×';
+        removeBtn.title = 'Remove tag';
+        removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeTag(tagName);
+        });
+        
+        chip.appendChild(tagText);
+        chip.appendChild(removeBtn);
+        container.appendChild(chip);
+    });
+    
+    // Update the hidden field value for form compatibility
+    updateHiddenTagField();
+}
+
+function updateHiddenTagField() {
+    // Create a hidden field to maintain compatibility with save functions
+    let hiddenField = document.getElementById('nodeTagsHidden');
+    if (!hiddenField) {
+        hiddenField = document.createElement('input');
+        hiddenField.type = 'hidden';
+        hiddenField.id = 'nodeTagsHidden';
+        document.getElementById('nodeTags').parentElement.appendChild(hiddenField);
+    }
+    hiddenField.value = Array.from(selectedTags).join(', ');
 }
 
 function updateSelectedTagsDisplay() {
@@ -5281,20 +6217,32 @@ function hideTagSuggestions() {
 
 function loadTagsFromNodeData(tags) {
     selectedTags.clear();
-    if (tags && Array.isArray(tags)) {
-        tags.forEach(tag => {
-            selectedTags.add(tag);
-            projectTagLibrary.add(tag); // Add to project library
-        });
-    }
-    updateSelectedTagsDisplay();
     
-    // Update the input field to reflect the loaded tags
-    const tagInput = document.getElementById('nodeTags');
-    if (tagInput) {
-        tagInput.value = Array.from(selectedTags).join(', ');
+    // Handle both array format (old) and any other format
+    if (tags) {
+        if (Array.isArray(tags)) {
+            // Old format: array of strings
+            tags.forEach(tag => {
+                if (typeof tag === 'string' && tag.trim()) {
+                    selectedTags.add(tag.trim());
+                    projectTagLibrary.add(tag.trim());
+                }
+            });
+        } else if (typeof tags === 'string') {
+            // Handle comma-separated string format
+            tags.split(',').forEach(tag => {
+                const trimmedTag = tag.trim();
+                if (trimmedTag) {
+                    selectedTags.add(trimmedTag);
+                    projectTagLibrary.add(trimmedTag);
+                }
+            });
+        }
     }
+    
+    updateTagChipsDisplay();
 }
+
 
 // NEW: Entry Point Management System
 function setupEntryPointListeners() {
@@ -5499,5 +6447,6 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeIconSelection();
         initializeConditionIconSelection();
         updateUndoRedoButtons();
+        updateConditionModalWithColorPicker();
     }, 100);
 });
